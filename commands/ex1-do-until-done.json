@@ -1,0 +1,249 @@
+{
+  "id": "322403cf-2b9f-4a6e-ab7b-59b78ae76480",
+  "name": "ex1-do-until-done",
+  "description": "",
+  "flowchart": {
+    "blocks": {
+      "c2a88dad-b3cc-4dc8-8c73-01387a99b68d": {
+        "id": "c2a88dad-b3cc-4dc8-8c73-01387a99b68d",
+        "type": "start",
+        "name": "Start",
+        "position": {
+          "x": 150,
+          "y": 50
+        }
+      },
+      "78a8bd21-28e8-4a15-8102-eaf43606b401": {
+        "id": "78a8bd21-28e8-4a15-8102-eaf43606b401",
+        "type": "prompt",
+        "name": "Implement",
+        "position": {
+          "x": 150,
+          "y": 150
+        },
+        "prompt": "Fully implement $1, and document your progress in $2\n\nIf AUDIT.md exists, it means that the task has been partially implemented already but has issues.\n\nWhen you're done working, answer this question: has $1 been fully implemented?",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "fullyImplemented": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "fullyImplemented"
+          ]
+        },
+        "sound_effect": null
+      },
+      "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75": {
+        "id": "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75",
+        "type": "branch",
+        "name": "Fully Implemented?",
+        "position": {
+          "x": 150,
+          "y": 250
+        },
+        "condition": "fullyImplemented"
+      },
+      "1e846a61-89ec-4bd4-a186-58196db686ac": {
+        "id": "1e846a61-89ec-4bd4-a186-58196db686ac",
+        "type": "end",
+        "name": "End",
+        "position": {
+          "x": 150,
+          "y": 750
+        }
+      },
+      "57efec62-1dbc-482a-95e4-12aeca6b5836": {
+        "id": "57efec62-1dbc-482a-95e4-12aeca6b5836",
+        "type": "prompt",
+        "name": "Continue Implementing",
+        "position": {
+          "x": 350,
+          "y": 250
+        },
+        "prompt": "$2 has the current progress toward fully implementing $1\n\nContinue fully implementing $1\n\nWhen you're done working, answer this question: has $1 been fully implemented?",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "fullyImplemented": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "fullyImplemented"
+          ]
+        },
+        "sound_effect": null
+      },
+      "40c8da66-262c-4b8d-b778-fd59ef6fe9c6": {
+        "id": "40c8da66-262c-4b8d-b778-fd59ef6fe9c6",
+        "type": "bash",
+        "name": "Tag Complete",
+        "position": {
+          "x": 150,
+          "y": 650
+        },
+        "command": "git tag \"ex1-complete\"",
+        "capture_output": true,
+        "output_variable": "",
+        "output_type": "string",
+        "working_directory": "",
+        "continue_on_error": false,
+        "exit_code_variable": ""
+      },
+      "6619ca58-f6f1-458a-a0ce-d331e9dbb527": {
+        "id": "6619ca58-f6f1-458a-a0ce-d331e9dbb527",
+        "type": "refresh",
+        "name": "Refresh",
+        "position": {
+          "x": 150,
+          "y": 350
+        }
+      },
+      "dabd9a49-9f54-49c8-b0d5-e66663292ddf": {
+        "id": "dabd9a49-9f54-49c8-b0d5-e66663292ddf",
+        "type": "prompt",
+        "name": "Audit",
+        "position": {
+          "x": 150,
+          "y": 450
+        },
+        "prompt": "Audit the codebase against the original task description: $1\n\nWrite your audit to AUDIT.md.\n\nDoes the codebase fulfill the task requirements?",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "requirementsFulfilled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "requirementsFulfilled"
+          ]
+        },
+        "sound_effect": null
+      },
+      "ac42f823-4fb6-4aba-b47d-0e47239f220f": {
+        "id": "ac42f823-4fb6-4aba-b47d-0e47239f220f",
+        "type": "branch",
+        "name": "Audit Passed?",
+        "position": {
+          "x": 150,
+          "y": 550
+        },
+        "condition": "requirementsFulfilled"
+      }
+    },
+    "connections": [
+      {
+        "id": "d05d37ed-de94-4a1a-b25a-bfc0ac702c42",
+        "source_block_id": "c2a88dad-b3cc-4dc8-8c73-01387a99b68d",
+        "target_block_id": "78a8bd21-28e8-4a15-8102-eaf43606b401",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "684d85d4-c0b7-41ea-b1cf-7224f10eb225",
+        "source_block_id": "78a8bd21-28e8-4a15-8102-eaf43606b401",
+        "target_block_id": "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "30f43656-8938-4844-8be3-9a8b1adac0a7",
+        "source_block_id": "57efec62-1dbc-482a-95e4-12aeca6b5836",
+        "target_block_id": "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75",
+        "source_port": "top",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "b62af580-a729-42fc-b0c3-a16ce94037bc",
+        "source_block_id": "40c8da66-262c-4b8d-b778-fd59ef6fe9c6",
+        "target_block_id": "1e846a61-89ec-4bd4-a186-58196db686ac",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "03f00220-05dd-4183-9e9f-3f84328997dd",
+        "source_block_id": "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75",
+        "target_block_id": "6619ca58-f6f1-458a-a0ce-d331e9dbb527",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "3cca698c-fdcf-4655-a890-20df2fa05e49",
+        "source_block_id": "6619ca58-f6f1-458a-a0ce-d331e9dbb527",
+        "target_block_id": "dabd9a49-9f54-49c8-b0d5-e66663292ddf",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "d9e05f9d-5893-4fbb-b6fb-7ea25daa04b2",
+        "source_block_id": "dabd9a49-9f54-49c8-b0d5-e66663292ddf",
+        "target_block_id": "ac42f823-4fb6-4aba-b47d-0e47239f220f",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "10225bce-e5a3-434e-8b09-30dbdb9799cd",
+        "source_block_id": "ac42f823-4fb6-4aba-b47d-0e47239f220f",
+        "target_block_id": "78a8bd21-28e8-4a15-8102-eaf43606b401",
+        "source_port": "left",
+        "target_port": "left",
+        "is_true_path": false,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "13786a7d-69b4-4aee-a229-47bcd391b953",
+        "source_block_id": "ac42f823-4fb6-4aba-b47d-0e47239f220f",
+        "target_block_id": "40c8da66-262c-4b8d-b778-fd59ef6fe9c6",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "874fc5be-653d-4d15-b190-624913b9da84",
+        "source_block_id": "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75",
+        "target_block_id": "57efec62-1dbc-482a-95e4-12aeca6b5836",
+        "source_port": "right",
+        "target_port": "left",
+        "is_true_path": false,
+        "condition": null,
+        "label": null
+      }
+    ],
+    "start_block_id": "c2a88dad-b3cc-4dc8-8c73-01387a99b68d"
+  },
+  "metadata": {
+    "created": "2025-12-02T18:13:03.344300",
+    "modified": "2025-12-02T22:24:45.225379",
+    "version": "1.0",
+    "author": null,
+    "tags": []
+  },
+  "arguments": []
+}

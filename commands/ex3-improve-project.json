@@ -1,0 +1,261 @@
+{
+  "id": "43fc0289-bd09-42b8-b07c-6aac92240f3b",
+  "name": "ex3-improve-project",
+  "description": "",
+  "flowchart": {
+    "blocks": {
+      "767a84f6-e058-425f-abdc-f5df93aa3d7f": {
+        "id": "767a84f6-e058-425f-abdc-f5df93aa3d7f",
+        "type": "start",
+        "name": "Start",
+        "position": {
+          "x": 100,
+          "y": 50
+        }
+      },
+      "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5": {
+        "id": "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5",
+        "type": "prompt",
+        "name": "Prompt",
+        "position": {
+          "x": 250,
+          "y": 550
+        },
+        "prompt": "Read and understand the codebase, DESIGN_DOC.md, and all design docs in ./improvements if any exist. Do not edit any code. Create a plan for a new major feature to implement in the project. Create a design doc for the new feature in ./improvements/IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
+        "output_schema": null,
+        "sound_effect": null
+      },
+      "90d9e6f4-416c-45ec-8ae4-a6a68b4cffbb": {
+        "id": "90d9e6f4-416c-45ec-8ae4-a6a68b4cffbb",
+        "type": "end",
+        "name": "End",
+        "position": {
+          "x": 100,
+          "y": 450
+        }
+      },
+      "7bdba64a-eb77-4af8-b10e-7cf854c758d9": {
+        "id": "7bdba64a-eb77-4af8-b10e-7cf854c758d9",
+        "type": "variable",
+        "name": "i=0",
+        "position": {
+          "x": 100,
+          "y": 250
+        },
+        "variable_name": "i",
+        "variable_value": "0",
+        "variable_type": "int"
+      },
+      "702386ab-3416-47c8-b85e-de3d095b154c": {
+        "id": "702386ab-3416-47c8-b85e-de3d095b154c",
+        "type": "branch",
+        "name": "i<max",
+        "position": {
+          "x": 250,
+          "y": 350
+        },
+        "condition": "i < {{max}}"
+      },
+      "f4c00d98-d398-459c-aaad-fa33766512d0": {
+        "id": "f4c00d98-d398-459c-aaad-fa33766512d0",
+        "type": "bash",
+        "name": "i++",
+        "position": {
+          "x": 400,
+          "y": 250
+        },
+        "command": "echo $(({{i}}+1))",
+        "capture_output": true,
+        "output_variable": "i",
+        "output_type": "int",
+        "working_directory": "",
+        "continue_on_error": false,
+        "exit_code_variable": ""
+      },
+      "6909de23-0368-47db-a6f7-d6439a4f807e": {
+        "id": "6909de23-0368-47db-a6f7-d6439a4f807e",
+        "type": "refresh",
+        "name": "Refresh",
+        "position": {
+          "x": 250,
+          "y": 450
+        }
+      },
+      "a5c2fb48-53b5-468a-8504-9f12a4231064": {
+        "id": "a5c2fb48-53b5-468a-8504-9f12a4231064",
+        "type": "command",
+        "name": "Command",
+        "position": {
+          "x": 250,
+          "y": 650
+        },
+        "command_name": "ex1-do-until-done",
+        "arguments": "./improvements/IMPROVEMENTS_DESIGN_DOC_{{i}}.md ./progress_reports/PROGRESS_FOR_IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
+        "inherit_variables": false,
+        "merge_output": false
+      },
+      "cd3fbd3e-ab6e-4784-863f-02c0da80b729": {
+        "id": "cd3fbd3e-ab6e-4784-863f-02c0da80b729",
+        "type": "command",
+        "name": "Command",
+        "position": {
+          "x": 400,
+          "y": 650
+        },
+        "command_name": "ex2-testing-loop",
+        "arguments": "./improvements/IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
+        "inherit_variables": false,
+        "merge_output": false
+      },
+      "3b1b5dbf-b44c-4803-8ce1-dfb9cabadb4f": {
+        "id": "3b1b5dbf-b44c-4803-8ce1-dfb9cabadb4f",
+        "type": "variable",
+        "name": "max",
+        "position": {
+          "x": 100,
+          "y": 150
+        },
+        "variable_name": "max",
+        "variable_value": "$1",
+        "variable_type": "int"
+      },
+      "fa8463d6-a031-4d73-9aa6-2bcdf7c84971": {
+        "id": "fa8463d6-a031-4d73-9aa6-2bcdf7c84971",
+        "type": "bash",
+        "name": "Tag Complete",
+        "position": {
+          "x": 100,
+          "y": 350
+        },
+        "command": "git tag \"ex3-complete\"",
+        "capture_output": true,
+        "output_variable": "",
+        "output_type": "string",
+        "working_directory": "",
+        "continue_on_error": false,
+        "exit_code_variable": ""
+      }
+    },
+    "connections": [
+      {
+        "id": "4cbbe576-c036-4bb2-91b4-3851af5f7164",
+        "source_block_id": "7bdba64a-eb77-4af8-b10e-7cf854c758d9",
+        "target_block_id": "702386ab-3416-47c8-b85e-de3d095b154c",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "f48a3351-91e1-4c06-8fba-4058a5a3bcff",
+        "source_block_id": "f4c00d98-d398-459c-aaad-fa33766512d0",
+        "target_block_id": "702386ab-3416-47c8-b85e-de3d095b154c",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "6da02095-1c63-40dd-9123-7f5b46eaeb4e",
+        "source_block_id": "702386ab-3416-47c8-b85e-de3d095b154c",
+        "target_block_id": "6909de23-0368-47db-a6f7-d6439a4f807e",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "6838420d-e638-4a3b-9d99-c174f2fe33cf",
+        "source_block_id": "6909de23-0368-47db-a6f7-d6439a4f807e",
+        "target_block_id": "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "7abe2d8f-e2aa-4886-82b7-9e92e16d8029",
+        "source_block_id": "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5",
+        "target_block_id": "a5c2fb48-53b5-468a-8504-9f12a4231064",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "7cd06e68-c542-4ae4-b42b-f651689b8313",
+        "source_block_id": "a5c2fb48-53b5-468a-8504-9f12a4231064",
+        "target_block_id": "cd3fbd3e-ab6e-4784-863f-02c0da80b729",
+        "source_port": "right",
+        "target_port": "left",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "5d74af49-b014-465a-a54c-69049d2748de",
+        "source_block_id": "767a84f6-e058-425f-abdc-f5df93aa3d7f",
+        "target_block_id": "3b1b5dbf-b44c-4803-8ce1-dfb9cabadb4f",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "e270b52d-3cb7-48fa-ad54-04efda75b9bb",
+        "source_block_id": "3b1b5dbf-b44c-4803-8ce1-dfb9cabadb4f",
+        "target_block_id": "7bdba64a-eb77-4af8-b10e-7cf854c758d9",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "a88f220c-9d35-4996-a92e-8aea1b39f867",
+        "source_block_id": "702386ab-3416-47c8-b85e-de3d095b154c",
+        "target_block_id": "fa8463d6-a031-4d73-9aa6-2bcdf7c84971",
+        "source_port": "left",
+        "target_port": "right",
+        "is_true_path": false,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "336069ae-8588-4143-903a-6a25fc117ecf",
+        "source_block_id": "fa8463d6-a031-4d73-9aa6-2bcdf7c84971",
+        "target_block_id": "90d9e6f4-416c-45ec-8ae4-a6a68b4cffbb",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "744d9da1-d9b4-49b0-be23-6a81a3e9b967",
+        "source_block_id": "cd3fbd3e-ab6e-4784-863f-02c0da80b729",
+        "target_block_id": "f4c00d98-d398-459c-aaad-fa33766512d0",
+        "source_port": "right",
+        "target_port": "right",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      }
+    ],
+    "start_block_id": "767a84f6-e058-425f-abdc-f5df93aa3d7f"
+  },
+  "metadata": {
+    "created": "2025-12-02T18:39:25.499029",
+    "modified": "2025-12-02T22:20:12.602659",
+    "version": "1.0",
+    "author": null,
+    "tags": []
+  },
+  "arguments": []
+}

@@ -1,0 +1,24 @@
+# Ignore everything by default
+*
+
+# Allow src/ directory and all its contents
+!src/
+!src/**
+
+# But ignore __pycache__ everywhere
+__pycache__/
+
+# Allow specific files in commands/ (must un-ignore dir first, contents still ignored by *)
+!commands/
+!commands/ex0-design-doc.json
+!commands/ex1-do-until-done.json
+!commands/ex2-testing-loop.json
+!commands/ex3-improve-project.json
+
+# Allow root level files
+!pyproject.toml
+!README.md
+!uv.lock
+
+# Allow .gitignore itself
+!.gitignore

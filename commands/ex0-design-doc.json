@@ -1,0 +1,96 @@
+{
+  "id": "0d15c8c1-fb43-43af-b2ab-e1b110802355",
+  "name": "ex0-design-doc",
+  "description": "",
+  "flowchart": {
+    "blocks": {
+      "414a789d-89c1-4b71-ba0e-fd17796d314e": {
+        "id": "414a789d-89c1-4b71-ba0e-fd17796d314e",
+        "type": "start",
+        "name": "Start",
+        "position": {
+          "x": 100,
+          "y": 50
+        }
+      },
+      "1ee52f21-207e-4414-a626-ca4d6e8452d1": {
+        "id": "1ee52f21-207e-4414-a626-ca4d6e8452d1",
+        "type": "prompt",
+        "name": "Design Doc",
+        "position": {
+          "x": 100,
+          "y": 150
+        },
+        "prompt": "Don't implement anything yet. Create a DESIGN_DOC.md for this task: $1",
+        "output_schema": null,
+        "sound_effect": null
+      },
+      "761189ae-0125-4001-bda0-878b09658938": {
+        "id": "761189ae-0125-4001-bda0-878b09658938",
+        "type": "end",
+        "name": "End",
+        "position": {
+          "x": 100,
+          "y": 350
+        }
+      },
+      "99c754b5-35eb-408e-8e54-dae99a401fa1": {
+        "id": "99c754b5-35eb-408e-8e54-dae99a401fa1",
+        "type": "bash",
+        "name": "Tag Complete",
+        "position": {
+          "x": 100,
+          "y": 250
+        },
+        "command": "git tag \"ex0-complete\"",
+        "capture_output": true,
+        "output_variable": "",
+        "output_type": "string",
+        "working_directory": "",
+        "continue_on_error": false,
+        "exit_code_variable": ""
+      }
+    },
+    "connections": [
+      {
+        "id": "8ec40640-1d4f-4066-a5cb-d62f35acbace",
+        "source_block_id": "414a789d-89c1-4b71-ba0e-fd17796d314e",
+        "target_block_id": "1ee52f21-207e-4414-a626-ca4d6e8452d1",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "cd91b0a1-fe89-44db-9a66-5efe065dceca",
+        "source_block_id": "1ee52f21-207e-4414-a626-ca4d6e8452d1",
+        "target_block_id": "99c754b5-35eb-408e-8e54-dae99a401fa1",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "b40942fa-c2cd-4d2a-a121-7854e3cffc7f",
+        "source_block_id": "99c754b5-35eb-408e-8e54-dae99a401fa1",
+        "target_block_id": "761189ae-0125-4001-bda0-878b09658938",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      }
+    ],
+    "start_block_id": "414a789d-89c1-4b71-ba0e-fd17796d314e"
+  },
+  "metadata": {
+    "created": "2025-12-01T02:20:39.676736",
+    "modified": "2025-12-02T20:04:03.705071",
+    "version": "1.0",
+    "author": null,
+    "tags": []
+  },
+  "arguments": []
+}

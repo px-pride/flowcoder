@@ -1,0 +1,215 @@
+{
+  "id": "b790dea6-a9a7-4049-bc60-74d8055989e4",
+  "name": "ex2-testing-loop",
+  "description": "",
+  "flowchart": {
+    "blocks": {
+      "64076094-18a9-4bb9-8b94-216c22bfd570": {
+        "id": "64076094-18a9-4bb9-8b94-216c22bfd570",
+        "type": "start",
+        "name": "Start",
+        "position": {
+          "x": 100,
+          "y": 50
+        }
+      },
+      "9292ffc0-1857-4675-b1d5-a41fe0fe787a": {
+        "id": "9292ffc0-1857-4675-b1d5-a41fe0fe787a",
+        "type": "prompt",
+        "name": "Write Tests",
+        "position": {
+          "x": 100,
+          "y": 150
+        },
+        "prompt": "Write a test suite for this codebase, based on $1. This can include unit tests and integration tests, but should focus on e2e tests to whatever extent is possible. Some tools like Playwright can make E2E testing more powerful for some projects. Don't run the test suite. \n\nMake sure the test suite can be run with the command: `./run_all_tests.sh` -- this command should produce exit code 0 if all tests pass and nonzero exit code otherwise.",
+        "output_schema": null,
+        "sound_effect": null
+      },
+      "330fe9c1-90a9-4f50-a1dd-684a191e0395": {
+        "id": "330fe9c1-90a9-4f50-a1dd-684a191e0395",
+        "type": "bash",
+        "name": "Run All Tests",
+        "position": {
+          "x": 100,
+          "y": 250
+        },
+        "command": "./run_all_tests.sh &> test_results.txt",
+        "capture_output": true,
+        "output_variable": "",
+        "output_type": "string",
+        "working_directory": "",
+        "continue_on_error": true,
+        "exit_code_variable": "exitCode"
+      },
+      "df185304-b762-4fd8-806b-4af106195211": {
+        "id": "df185304-b762-4fd8-806b-4af106195211",
+        "type": "branch",
+        "name": "Tests Passed?",
+        "position": {
+          "x": 100,
+          "y": 350
+        },
+        "condition": "exitCode == 0"
+      },
+      "b2d96b34-421f-4b16-bafd-84231b59dcff": {
+        "id": "b2d96b34-421f-4b16-bafd-84231b59dcff",
+        "type": "bash",
+        "name": "Tag Complete",
+        "position": {
+          "x": 100,
+          "y": 450
+        },
+        "command": "git tag \"ex2-complete\"",
+        "capture_output": true,
+        "output_variable": "",
+        "output_type": "string",
+        "working_directory": "",
+        "continue_on_error": false,
+        "exit_code_variable": ""
+      },
+      "108f5f23-3239-436f-a7c1-6889259eec2c": {
+        "id": "108f5f23-3239-436f-a7c1-6889259eec2c",
+        "type": "end",
+        "name": "End",
+        "position": {
+          "x": 100,
+          "y": 550
+        }
+      },
+      "c4498876-20d1-4eda-9a6b-d25125a5b920": {
+        "id": "c4498876-20d1-4eda-9a6b-d25125a5b920",
+        "type": "prompt",
+        "name": "Fix Test Failures",
+        "position": {
+          "x": 550,
+          "y": 350
+        },
+        "prompt": "Fix all test failures.",
+        "output_schema": null,
+        "sound_effect": null
+      },
+      "52de1a6c-ce7b-4593-a131-8237e12b120d": {
+        "id": "52de1a6c-ce7b-4593-a131-8237e12b120d",
+        "type": "refresh",
+        "name": "Refresh",
+        "position": {
+          "x": 250,
+          "y": 350
+        }
+      },
+      "b3454ee6-763d-44d5-bc82-deb3ef3af82b": {
+        "id": "b3454ee6-763d-44d5-bc82-deb3ef3af82b",
+        "type": "prompt",
+        "name": "Diagnose Test Failures",
+        "position": {
+          "x": 400,
+          "y": 350
+        },
+        "prompt": "`./run_all_tests.sh` returned exit code {{exitCode}}. The output is in test_results.txt. \n\nIf the previous git commit unsuccessfully attempted to address these test failures, you must determine if those changes were actually necessary. If not, revert them (to mitigate tech debt).\n\nDon't edit anything further. Analyze and diagnose the test failures.",
+        "output_schema": null,
+        "sound_effect": null
+      }
+    },
+    "connections": [
+      {
+        "id": "28a2c415-37d7-4607-9325-7795f799249f",
+        "source_block_id": "64076094-18a9-4bb9-8b94-216c22bfd570",
+        "target_block_id": "9292ffc0-1857-4675-b1d5-a41fe0fe787a",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "daaa3aee-8b19-4499-a6de-93556a1d10b2",
+        "source_block_id": "9292ffc0-1857-4675-b1d5-a41fe0fe787a",
+        "target_block_id": "330fe9c1-90a9-4f50-a1dd-684a191e0395",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "8bd1f5f1-01d1-4e49-98ae-9db44da2fa7a",
+        "source_block_id": "330fe9c1-90a9-4f50-a1dd-684a191e0395",
+        "target_block_id": "df185304-b762-4fd8-806b-4af106195211",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "53da68a7-ad7b-476b-8830-a74bb5e71e86",
+        "source_block_id": "df185304-b762-4fd8-806b-4af106195211",
+        "target_block_id": "b2d96b34-421f-4b16-bafd-84231b59dcff",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "7e7020b1-8108-4288-8ed8-d21e555f8bba",
+        "source_block_id": "b2d96b34-421f-4b16-bafd-84231b59dcff",
+        "target_block_id": "108f5f23-3239-436f-a7c1-6889259eec2c",
+        "source_port": "bottom",
+        "target_port": "top",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "89efe031-1d26-487a-b37f-319230de57f6",
+        "source_block_id": "df185304-b762-4fd8-806b-4af106195211",
+        "target_block_id": "52de1a6c-ce7b-4593-a131-8237e12b120d",
+        "source_port": "right",
+        "target_port": "left",
+        "is_true_path": false,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "bc2b1c1e-cc70-4f85-a5e7-eafec296d8c2",
+        "source_block_id": "52de1a6c-ce7b-4593-a131-8237e12b120d",
+        "target_block_id": "b3454ee6-763d-44d5-bc82-deb3ef3af82b",
+        "source_port": "right",
+        "target_port": "left",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "cbf9ccaa-ae25-404f-9cc3-b48f1b7fd635",
+        "source_block_id": "b3454ee6-763d-44d5-bc82-deb3ef3af82b",
+        "target_block_id": "c4498876-20d1-4eda-9a6b-d25125a5b920",
+        "source_port": "right",
+        "target_port": "left",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      },
+      {
+        "id": "47e926de-9284-4ef0-8c1c-06dfe75e885d",
+        "source_block_id": "c4498876-20d1-4eda-9a6b-d25125a5b920",
+        "target_block_id": "330fe9c1-90a9-4f50-a1dd-684a191e0395",
+        "source_port": "top",
+        "target_port": "right",
+        "is_true_path": true,
+        "condition": null,
+        "label": null
+      }
+    ],
+    "start_block_id": "64076094-18a9-4bb9-8b94-216c22bfd570"
+  },
+  "metadata": {
+    "created": "2025-12-02T18:17:58.155020",
+    "modified": "2025-12-02T20:04:29.012937",
+    "version": "1.0",
+    "author": null,
+    "tags": []
+  },
+  "arguments": []
+}
