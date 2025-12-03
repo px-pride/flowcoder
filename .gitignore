@@ -14,6 +14,7 @@ __pycache__/
 !commands/ex1-do-until-done.json
 !commands/ex2-testing-loop.json
 !commands/ex3-improve-project.json
+!commands/all-examples.json
 
 # Allow root level files
 !pyproject.toml
