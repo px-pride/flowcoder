@@ -21,7 +21,7 @@
           "x": 100,
           "y": 150
         },
-        "prompt": "Write a test suite for this codebase, based on $1. This can include unit tests and integration tests, but should focus on e2e tests to whatever extent is possible. Some tools like Playwright can make E2E testing more powerful for some projects. Don't run the test suite. \n\nMake sure the test suite can be run with the command: `./run_all_tests.sh` -- this command should produce exit code 0 if all tests pass and nonzero exit code otherwise.",
+        "prompt": "Write a test suite for this codebase, based on ./design_docs/$1. This can include unit tests and integration tests, but should focus on e2e tests to whatever extent is possible. Some tools like Playwright can make E2E testing more powerful for some projects. Don't run the test suite. \n\nMake sure the test suite can be run with the command: `./run_all_tests.sh` -- this command should produce exit code 0 if all tests pass and nonzero exit code otherwise.",
         "output_schema": null,
         "sound_effect": null
       },
@@ -206,7 +206,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:17:58.155020",
-    "modified": "2025-12-02T20:04:29.012937",
+    "modified": "2025-12-03T12:23:15.193104",
     "version": "1.0",
     "author": null,
     "tags": []

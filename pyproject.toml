@@ -12,6 +12,7 @@ dependencies = [
     "jsonschema>=4.19.0",
     "jsonpath-ng>=1.6.0",
     "asyncio-throttle>=1.0.0",
+    "tkfilebrowser>=2.3.2",
 ]
 
 [project.optional-dependencies]

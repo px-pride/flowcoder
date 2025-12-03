@@ -1389,6 +1389,9 @@ class ExecutionController:
             True if condition matches, False otherwise
         """
         try:
+            # Substitute any {{var}} references in the condition before parsing
+            condition = VariableSubstitution.substitute_variables(condition, data)
+
             # Parse condition
             # Support: field/jsonpath operator value
             # IMPORTANT: Match >= and <= before > and < to avoid partial matches

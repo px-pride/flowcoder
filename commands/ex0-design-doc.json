@@ -21,7 +21,7 @@
           "x": 100,
           "y": 150
         },
-        "prompt": "Don't implement anything yet. Create a DESIGN_DOC.md for this task: $1",
+        "prompt": "Don't implement anything yet. Create a design doc in ./design_docs/DESIGN_DOC.md for this task: $1",
         "output_schema": null,
         "sound_effect": null
       },
@@ -87,7 +87,7 @@
   },
   "metadata": {
     "created": "2025-12-01T02:20:39.676736",
-    "modified": "2025-12-02T20:04:03.705071",
+    "modified": "2025-12-03T12:19:35.818923",
     "version": "1.0",
     "author": null,
     "tags": []

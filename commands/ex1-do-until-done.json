@@ -21,7 +21,7 @@
           "x": 150,
           "y": 150
         },
-        "prompt": "Fully implement $1, and document your progress in $2\n\nIf AUDIT.md exists, it means that the task has been partially implemented already but has issues.\n\nWhen you're done working, answer this question: has $1 been fully implemented?",
+        "prompt": "Fully implement ./design_docs/$1, and document your progress in ./progress-reports/PROGRESS_FOR_$1\n\nIf ./audits/AUDIT_FOR_$1 exists, it means that the task has been partially implemented already but has issues.\n\nWhen you're done working, answer this question: has  ./design_docs/$1 been fully implemented?",
         "output_schema": {
           "type": "object",
           "properties": {
@@ -40,7 +40,7 @@
         "type": "branch",
         "name": "Fully Implemented?",
         "position": {
-          "x": 150,
+          "x": 200,
           "y": 250
         },
         "condition": "fullyImplemented"
@@ -59,10 +59,10 @@
         "type": "prompt",
         "name": "Continue Implementing",
         "position": {
-          "x": 350,
+          "x": 400,
           "y": 250
         },
-        "prompt": "$2 has the current progress toward fully implementing $1\n\nContinue fully implementing $1\n\nWhen you're done working, answer this question: has $1 been fully implemented?",
+        "prompt": "./progress-reports/PROGRESS_FOR_$1 has the current progress toward fully implementing ./design_docs/$1\n\nContinue fully implementing  ./design_docs/$1\n\nWhen you're done working, answer this question: has ./design_docs/$1 been fully implemented?",
         "output_schema": {
           "type": "object",
           "properties": {
@@ -97,7 +97,7 @@
         "type": "refresh",
         "name": "Refresh",
         "position": {
-          "x": 150,
+          "x": 200,
           "y": 350
         }
       },
@@ -106,10 +106,10 @@
         "type": "prompt",
         "name": "Audit",
         "position": {
-          "x": 150,
+          "x": 200,
           "y": 450
         },
-        "prompt": "Audit the codebase against the original task description: $1\n\nWrite your audit to AUDIT.md.\n\nDoes the codebase fulfill the task requirements?",
+        "prompt": "Audit the codebase against the original task description:  ./design_docs/$1\n\nWrite your audit to ./audits/AUDIT_FOR_$1\n\nDoes the codebase fulfill the task requirements?",
         "output_schema": {
           "type": "object",
           "properties": {
@@ -128,7 +128,7 @@
         "type": "branch",
         "name": "Audit Passed?",
         "position": {
-          "x": 150,
+          "x": 100,
           "y": 550
         },
         "condition": "requirementsFulfilled"
@@ -240,7 +240,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:13:03.344300",
-    "modified": "2025-12-02T22:24:45.225379",
+    "modified": "2025-12-03T12:21:09.918139",
     "version": "1.0",
     "author": null,
     "tags": []

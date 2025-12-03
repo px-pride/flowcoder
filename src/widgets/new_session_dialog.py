@@ -10,8 +10,10 @@ Provides a modal dialog with:
 """
 
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 from pathlib import Path
+
+import tkfilebrowser
 import re
 from typing import Optional
 import logging
@@ -260,10 +262,11 @@ class NewSessionDialog(tk.Toplevel):
 
     def on_browse(self):
         """Handle Browse button click."""
-        directory = filedialog.askdirectory(
+        directory = tkfilebrowser.askopendirname(
             parent=self,
             title="Select Working Directory",
-            initialdir=self.directory_var.get() or Path.home()
+            initialdir=self.directory_var.get() or Path.home(),
+            foldercreation=True
         )
 
         if directory:

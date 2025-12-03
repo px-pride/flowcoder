@@ -16,12 +16,12 @@
       "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5": {
         "id": "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5",
         "type": "prompt",
-        "name": "Prompt",
+        "name": "Design New Feature",
         "position": {
           "x": 250,
           "y": 550
         },
-        "prompt": "Read and understand the codebase, DESIGN_DOC.md, and all design docs in ./improvements if any exist. Do not edit any code. Create a plan for a new major feature to implement in the project. Create a design doc for the new feature in ./improvements/IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
+        "prompt": "Read and understand the codebase and all design docs in ./design_docs if any exist. Do not edit any code. Create a plan for a new major feature to implement in the project. Create a design doc for the new feature in ./design_docs/IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
         "output_schema": null,
         "sound_effect": null
       },
@@ -90,7 +90,7 @@
           "y": 650
         },
         "command_name": "ex1-do-until-done",
-        "arguments": "./improvements/IMPROVEMENTS_DESIGN_DOC_{{i}}.md ./progress_reports/PROGRESS_FOR_IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
+        "arguments": "IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
         "inherit_variables": false,
         "merge_output": false
       },
@@ -103,7 +103,7 @@
           "y": 650
         },
         "command_name": "ex2-testing-loop",
-        "arguments": "./improvements/IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
+        "arguments": "IMPROVEMENTS_DESIGN_DOC_{{i}}.md",
         "inherit_variables": false,
         "merge_output": false
       },
@@ -252,7 +252,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:39:25.499029",
-    "modified": "2025-12-02T22:20:12.602659",
+    "modified": "2025-12-03T12:22:24.212579",
     "version": "1.0",
     "author": null,
     "tags": []
