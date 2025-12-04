@@ -47,7 +47,7 @@
         "output_variable": "",
         "output_type": "string",
         "working_directory": "",
-        "continue_on_error": false,
+        "continue_on_error": true,
         "exit_code_variable": ""
       }
     },
@@ -87,7 +87,7 @@
   },
   "metadata": {
     "created": "2025-12-01T02:20:39.676736",
-    "modified": "2025-12-03T12:19:35.818923",
+    "modified": "2025-12-03T17:13:39.992831",
     "version": "1.0",
     "author": null,
     "tags": []

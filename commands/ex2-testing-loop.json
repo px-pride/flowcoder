@@ -59,12 +59,12 @@
           "x": 100,
           "y": 450
         },
-        "command": "git tag \"ex2-complete\"",
+        "command": "git tag \"ex2-complete\" 2>/dev/null || true",
         "capture_output": true,
         "output_variable": "",
         "output_type": "string",
         "working_directory": "",
-        "continue_on_error": false,
+        "continue_on_error": true,
         "exit_code_variable": ""
       },
       "108f5f23-3239-436f-a7c1-6889259eec2c": {
@@ -206,7 +206,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:17:58.155020",
-    "modified": "2025-12-03T12:23:15.193104",
+    "modified": "2025-12-03T17:13:14.285421",
     "version": "1.0",
     "author": null,
     "tags": []

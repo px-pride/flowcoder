@@ -132,7 +132,7 @@
         "output_variable": "",
         "output_type": "string",
         "working_directory": "",
-        "continue_on_error": false,
+        "continue_on_error": true,
         "exit_code_variable": ""
       }
     },
@@ -252,7 +252,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:39:25.499029",
-    "modified": "2025-12-03T12:22:24.212579",
+    "modified": "2025-12-03T17:13:46.139881",
     "version": "1.0",
     "author": null,
     "tags": []
