@@ -111,3 +111,12 @@ Sessions are isolated execution environments with their own working directory an
 3. Select a command and click **Run** (or use the play button)
 4. Watch execution progress in the flowchart canvas
 5. View results in the chat panel
+
+## Git Integration
+
+FlowCoder initializes a git repository in each session's working directory and automatically commits changes after each Prompt or Bash block finishes executing. Commits are labeled with the block type and name.
+
+Sessions can optionally be configured with:
+- **Git Remote URL**: Configures an `origin` remote for the repository
+- **Branch**: Checks out (or creates) a specific branch
+- **Auto Push**: Automatically pushes to the remote after each commit
