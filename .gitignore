@@ -16,6 +16,10 @@ __pycache__/
 !commands/ex3-improve-project.json
 !commands/all-examples.json
 
+# Allow specific images in images/
+!images/
+!images/flowchart-example.png
+
 # Allow root level files
 !pyproject.toml
 !README.md
