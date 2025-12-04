@@ -8,11 +8,13 @@ Create and execute custom automated workflows for Claude Code and Codex, via a v
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
+- Node.js 18+
 
 ## Install & Run
 
 ```bash
 uv sync
+npm install
 uv run python -m src.main
 ```
 

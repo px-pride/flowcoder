@@ -1,0 +1,23 @@
+{
+  "name": "flowcoder",
+  "version": "1.0.0",
+  "description": "Create and execute custom automated workflows for Claude Code and Codex, via a visual flowchart builder.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/px-pride/flowcoder.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/px-pride/flowcoder/issues"
+  },
+  "homepage": "https://github.com/px-pride/flowcoder#readme",
+  "dependencies": {
+    "@openai/codex-sdk": "^0.65.0"
+  }
+}
