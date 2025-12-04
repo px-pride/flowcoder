@@ -27,3 +27,6 @@ __pycache__/
 
 # Allow .gitignore itself
 !.gitignore
+
+# Allow .python-version
+!.python-version

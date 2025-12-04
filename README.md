@@ -6,7 +6,7 @@ Create and execute custom automated workflows for Claude Code and Codex, via a v
 
 ## Requirements
 
-- Python 3.14+
+- Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
 
 ## Install & Run
@@ -120,3 +120,15 @@ Sessions can optionally be configured with:
 - **Git Remote URL**: Configures an `origin` remote for the repository
 - **Branch**: Checks out (or creates) a specific branch
 - **Auto Push**: Automatically pushes to the remote after each commit
+
+## Troubleshooting
+
+### App crashes with `UnknownLocaleError: unknown locale 'c'`
+
+This occurs on systems where the locale is set to `C` (common in minimal Linux environments, WSL, or Docker). Set a proper locale before running:
+
+```bash
+LANG=en_US.UTF-8 uv run python -m src.main
+```
+
+To make it permanent, add `export LANG=en_US.UTF-8` to your `~/.bashrc`.
