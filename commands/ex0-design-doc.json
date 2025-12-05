@@ -7,7 +7,7 @@
       "414a789d-89c1-4b71-ba0e-fd17796d314e": {
         "id": "414a789d-89c1-4b71-ba0e-fd17796d314e",
         "type": "start",
-        "name": "Start",
+        "name": "START",
         "position": {
           "x": 100,
           "y": 50
@@ -16,7 +16,7 @@
       "1ee52f21-207e-4414-a626-ca4d6e8452d1": {
         "id": "1ee52f21-207e-4414-a626-ca4d6e8452d1",
         "type": "prompt",
-        "name": "Design Doc",
+        "name": "DESIGN DOC",
         "position": {
           "x": 100,
           "y": 150
@@ -28,7 +28,7 @@
       "761189ae-0125-4001-bda0-878b09658938": {
         "id": "761189ae-0125-4001-bda0-878b09658938",
         "type": "end",
-        "name": "End",
+        "name": "END",
         "position": {
           "x": 100,
           "y": 350
@@ -37,7 +37,7 @@
       "99c754b5-35eb-408e-8e54-dae99a401fa1": {
         "id": "99c754b5-35eb-408e-8e54-dae99a401fa1",
         "type": "bash",
-        "name": "Tag Complete",
+        "name": "TAG COMPLETE",
         "position": {
           "x": 100,
           "y": 250
@@ -87,7 +87,7 @@
   },
   "metadata": {
     "created": "2025-12-01T02:20:39.676736",
-    "modified": "2025-12-04T01:33:32.503635",
+    "modified": "2025-12-05T02:03:55.607413",
     "version": "1.0",
     "author": null,
     "tags": []

@@ -7,7 +7,7 @@
       "c2a88dad-b3cc-4dc8-8c73-01387a99b68d": {
         "id": "c2a88dad-b3cc-4dc8-8c73-01387a99b68d",
         "type": "start",
-        "name": "Start",
+        "name": "START",
         "position": {
           "x": 150,
           "y": 50
@@ -16,7 +16,7 @@
       "78a8bd21-28e8-4a15-8102-eaf43606b401": {
         "id": "78a8bd21-28e8-4a15-8102-eaf43606b401",
         "type": "prompt",
-        "name": "Implement",
+        "name": "IMPLEMENT",
         "position": {
           "x": 150,
           "y": 150
@@ -38,7 +38,7 @@
       "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75": {
         "id": "8fab8db0-be2b-4d33-8652-f3d7b9ea7b75",
         "type": "branch",
-        "name": "Fully Implemented?",
+        "name": "DONE?",
         "position": {
           "x": 200,
           "y": 250
@@ -48,7 +48,7 @@
       "1e846a61-89ec-4bd4-a186-58196db686ac": {
         "id": "1e846a61-89ec-4bd4-a186-58196db686ac",
         "type": "end",
-        "name": "End",
+        "name": "END",
         "position": {
           "x": 150,
           "y": 750
@@ -57,7 +57,7 @@
       "57efec62-1dbc-482a-95e4-12aeca6b5836": {
         "id": "57efec62-1dbc-482a-95e4-12aeca6b5836",
         "type": "prompt",
-        "name": "Continue Implementing",
+        "name": "KEEP GOING",
         "position": {
           "x": 400,
           "y": 250
@@ -79,7 +79,7 @@
       "40c8da66-262c-4b8d-b778-fd59ef6fe9c6": {
         "id": "40c8da66-262c-4b8d-b778-fd59ef6fe9c6",
         "type": "bash",
-        "name": "Tag Complete",
+        "name": "TAG COMPLETE",
         "position": {
           "x": 150,
           "y": 650
@@ -95,7 +95,7 @@
       "6619ca58-f6f1-458a-a0ce-d331e9dbb527": {
         "id": "6619ca58-f6f1-458a-a0ce-d331e9dbb527",
         "type": "refresh",
-        "name": "Refresh",
+        "name": "REFRESH",
         "position": {
           "x": 200,
           "y": 350
@@ -104,7 +104,7 @@
       "dabd9a49-9f54-49c8-b0d5-e66663292ddf": {
         "id": "dabd9a49-9f54-49c8-b0d5-e66663292ddf",
         "type": "prompt",
-        "name": "Audit",
+        "name": "AUDIT",
         "position": {
           "x": 200,
           "y": 450
@@ -126,7 +126,7 @@
       "ac42f823-4fb6-4aba-b47d-0e47239f220f": {
         "id": "ac42f823-4fb6-4aba-b47d-0e47239f220f",
         "type": "branch",
-        "name": "Audit Passed?",
+        "name": "AUDIT PASSED?",
         "position": {
           "x": 100,
           "y": 550
@@ -240,7 +240,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:13:03.344300",
-    "modified": "2025-12-03T17:24:24.656222",
+    "modified": "2025-12-05T02:14:13.408166",
     "version": "1.0",
     "author": null,
     "tags": []

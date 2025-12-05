@@ -7,7 +7,7 @@
       "64076094-18a9-4bb9-8b94-216c22bfd570": {
         "id": "64076094-18a9-4bb9-8b94-216c22bfd570",
         "type": "start",
-        "name": "Start",
+        "name": "START",
         "position": {
           "x": 100,
           "y": 50
@@ -16,7 +16,7 @@
       "9292ffc0-1857-4675-b1d5-a41fe0fe787a": {
         "id": "9292ffc0-1857-4675-b1d5-a41fe0fe787a",
         "type": "prompt",
-        "name": "Write Tests",
+        "name": "WRITE TESTS",
         "position": {
           "x": 100,
           "y": 150
@@ -28,7 +28,7 @@
       "330fe9c1-90a9-4f50-a1dd-684a191e0395": {
         "id": "330fe9c1-90a9-4f50-a1dd-684a191e0395",
         "type": "bash",
-        "name": "Run All Tests",
+        "name": "RUN ALL TESTS",
         "position": {
           "x": 100,
           "y": 250
@@ -44,7 +44,7 @@
       "df185304-b762-4fd8-806b-4af106195211": {
         "id": "df185304-b762-4fd8-806b-4af106195211",
         "type": "branch",
-        "name": "Tests Passed?",
+        "name": "TESTS PASSED?",
         "position": {
           "x": 100,
           "y": 350
@@ -54,7 +54,7 @@
       "b2d96b34-421f-4b16-bafd-84231b59dcff": {
         "id": "b2d96b34-421f-4b16-bafd-84231b59dcff",
         "type": "bash",
-        "name": "Tag Complete",
+        "name": "TAG COMPLETE",
         "position": {
           "x": 100,
           "y": 450
@@ -70,7 +70,7 @@
       "108f5f23-3239-436f-a7c1-6889259eec2c": {
         "id": "108f5f23-3239-436f-a7c1-6889259eec2c",
         "type": "end",
-        "name": "End",
+        "name": "END",
         "position": {
           "x": 100,
           "y": 550
@@ -79,7 +79,7 @@
       "c4498876-20d1-4eda-9a6b-d25125a5b920": {
         "id": "c4498876-20d1-4eda-9a6b-d25125a5b920",
         "type": "prompt",
-        "name": "Fix Test Failures",
+        "name": "FIX FAILS",
         "position": {
           "x": 550,
           "y": 350
@@ -91,7 +91,7 @@
       "52de1a6c-ce7b-4593-a131-8237e12b120d": {
         "id": "52de1a6c-ce7b-4593-a131-8237e12b120d",
         "type": "refresh",
-        "name": "Refresh",
+        "name": "REFRESH",
         "position": {
           "x": 250,
           "y": 350
@@ -100,7 +100,7 @@
       "b3454ee6-763d-44d5-bc82-deb3ef3af82b": {
         "id": "b3454ee6-763d-44d5-bc82-deb3ef3af82b",
         "type": "prompt",
-        "name": "Diagnose Test Failures",
+        "name": "DIAGNOSE FAILS",
         "position": {
           "x": 400,
           "y": 350
@@ -206,7 +206,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:17:58.155020",
-    "modified": "2025-12-03T17:13:14.285421",
+    "modified": "2025-12-05T02:14:55.234008",
     "version": "1.0",
     "author": null,
     "tags": []

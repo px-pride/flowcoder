@@ -7,7 +7,7 @@
       "767a84f6-e058-425f-abdc-f5df93aa3d7f": {
         "id": "767a84f6-e058-425f-abdc-f5df93aa3d7f",
         "type": "start",
-        "name": "Start",
+        "name": "START",
         "position": {
           "x": 100,
           "y": 50
@@ -16,7 +16,7 @@
       "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5": {
         "id": "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5",
         "type": "prompt",
-        "name": "Design New Feature",
+        "name": "DESIGN NEW FEATURE",
         "position": {
           "x": 250,
           "y": 550
@@ -28,7 +28,7 @@
       "90d9e6f4-416c-45ec-8ae4-a6a68b4cffbb": {
         "id": "90d9e6f4-416c-45ec-8ae4-a6a68b4cffbb",
         "type": "end",
-        "name": "End",
+        "name": "END",
         "position": {
           "x": 100,
           "y": 450
@@ -37,7 +37,7 @@
       "7bdba64a-eb77-4af8-b10e-7cf854c758d9": {
         "id": "7bdba64a-eb77-4af8-b10e-7cf854c758d9",
         "type": "variable",
-        "name": "i=0",
+        "name": "SET i=0",
         "position": {
           "x": 100,
           "y": 250
@@ -75,7 +75,7 @@
       "6909de23-0368-47db-a6f7-d6439a4f807e": {
         "id": "6909de23-0368-47db-a6f7-d6439a4f807e",
         "type": "refresh",
-        "name": "Refresh",
+        "name": "REFRESH",
         "position": {
           "x": 250,
           "y": 450
@@ -84,7 +84,7 @@
       "a5c2fb48-53b5-468a-8504-9f12a4231064": {
         "id": "a5c2fb48-53b5-468a-8504-9f12a4231064",
         "type": "command",
-        "name": "Command",
+        "name": "DO UNTIL DONE",
         "position": {
           "x": 250,
           "y": 650
@@ -97,7 +97,7 @@
       "cd3fbd3e-ab6e-4784-863f-02c0da80b729": {
         "id": "cd3fbd3e-ab6e-4784-863f-02c0da80b729",
         "type": "command",
-        "name": "Command",
+        "name": "TESTING LOOP",
         "position": {
           "x": 400,
           "y": 650
@@ -110,7 +110,7 @@
       "3b1b5dbf-b44c-4803-8ce1-dfb9cabadb4f": {
         "id": "3b1b5dbf-b44c-4803-8ce1-dfb9cabadb4f",
         "type": "variable",
-        "name": "max",
+        "name": "SET max",
         "position": {
           "x": 100,
           "y": 150
@@ -122,7 +122,7 @@
       "fa8463d6-a031-4d73-9aa6-2bcdf7c84971": {
         "id": "fa8463d6-a031-4d73-9aa6-2bcdf7c84971",
         "type": "bash",
-        "name": "Tag Complete",
+        "name": "TAG COMPLETE",
         "position": {
           "x": 100,
           "y": 350
@@ -252,7 +252,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:39:25.499029",
-    "modified": "2025-12-03T17:13:46.139881",
+    "modified": "2025-12-05T02:13:24.498179",
     "version": "1.0",
     "author": null,
     "tags": []

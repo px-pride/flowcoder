@@ -7,7 +7,7 @@
       "f1b38b7b-86d8-42c6-b074-d2a7d6527b4e": {
         "id": "f1b38b7b-86d8-42c6-b074-d2a7d6527b4e",
         "type": "start",
-        "name": "Start",
+        "name": "START",
         "position": {
           "x": 100,
           "y": 50
@@ -16,7 +16,7 @@
       "813c056e-dfea-4439-9f85-925f9c710df6": {
         "id": "813c056e-dfea-4439-9f85-925f9c710df6",
         "type": "command",
-        "name": "Ex0",
+        "name": "EXAMPLE 0",
         "position": {
           "x": 100,
           "y": 150
@@ -29,7 +29,7 @@
       "4fbf7b7a-998d-4e0d-97c9-37d829c6af77": {
         "id": "4fbf7b7a-998d-4e0d-97c9-37d829c6af77",
         "type": "command",
-        "name": "Ex1",
+        "name": "EXAMPLE 1",
         "position": {
           "x": 100,
           "y": 250
@@ -42,7 +42,7 @@
       "350f2fc6-f901-471d-9340-44ee5ffa4c7c": {
         "id": "350f2fc6-f901-471d-9340-44ee5ffa4c7c",
         "type": "command",
-        "name": "Ex2",
+        "name": "EXAMPLE 2",
         "position": {
           "x": 100,
           "y": 350
@@ -55,7 +55,7 @@
       "5f4f02b3-a89f-4708-97b8-822de843ec80": {
         "id": "5f4f02b3-a89f-4708-97b8-822de843ec80",
         "type": "command",
-        "name": "Ex3",
+        "name": "EXAMPLE 3",
         "position": {
           "x": 100,
           "y": 450
@@ -68,7 +68,7 @@
       "5f994901-adf0-46bc-9b3b-6436f78fa818": {
         "id": "5f994901-adf0-46bc-9b3b-6436f78fa818",
         "type": "end",
-        "name": "End",
+        "name": "END",
         "position": {
           "x": 100,
           "y": 550
@@ -131,7 +131,7 @@
   },
   "metadata": {
     "created": "2025-12-03T12:52:02.475415",
-    "modified": "2025-12-04T16:01:28.888135",
+    "modified": "2025-12-05T02:13:49.110042",
     "version": "1.0",
     "author": null,
     "tags": []
