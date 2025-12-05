@@ -1,5 +1,7 @@
 # FlowCoder
 
+[![Watch the demo](https://img.youtube.com/vi/1COOR6UmpsY/maxresdefault.jpg)](https://www.youtube.com/watch?v=1COOR6UmpsY)
+
 Create and execute custom automated workflows for Claude Code and Codex, via a visual flowchart builder.
 
 ![Flowchart Example](./images/flowchart-example.png)
@@ -122,6 +124,17 @@ Sessions can optionally be configured with:
 - **Git Remote URL**: Configures an `origin` remote for the repository
 - **Branch**: Checks out (or creates) a specific branch
 - **Auto Push**: Automatically pushes to the remote after each commit
+
+## Agents Tab Buttons
+
+| Button | Description |
+|--------|-------------|
+| **▶ Start Session** | Starts the agent for the selected session |
+| **⏸ Halt** | Pauses execution after the current block finishes. The session enters a halted state and can be resumed later |
+| **▶ Resume** | Continues execution from where it was halted |
+| **⏹ Stop** | Stops execution after the current block finishes, then terminates the agent process |
+| **⏹ Force Stop** | Immediately terminates the agent without waiting for the current block to finish. Use with caution as this may leave work incomplete |
+| **🔄 Refresh** | Stops the agent and starts a fresh instance. Useful for resetting the agent's state |
 
 ## Troubleshooting
 
