@@ -102,22 +102,22 @@ class BlockWidget:
             tags=('block', f'block_{self.block.id}')
         )
 
-        # Draw block type label at top
+        # Draw block type label at top (smaller)
         type_label = self._get_type_label()
         self.type_text_id = self.canvas.create_text(
-            self.x, self.y - 15,
+            self.x, self.y - 18,
             text=type_label,
-            font=('TkDefaultFont', 8, 'bold'),
+            font=('TkDefaultFont', 7, 'bold'),
             fill='white',
             tags=('block', f'block_{self.block.id}')
         )
 
-        # Draw block name/content at center
+        # Draw block name at center (big font)
         display_name = self._get_display_name()
         self.text_id = self.canvas.create_text(
             self.x, self.y + 5,
             text=display_name,
-            font=('TkDefaultFont', 9),
+            font=('TkDefaultFont', 11, 'bold'),
             fill='white',
             width=self.WIDTH - 10,
             tags=('block', f'block_{self.block.id}')
@@ -189,61 +189,17 @@ class BlockWidget:
             return "BLOCK"
 
     def _get_display_name(self) -> str:
-        """Get display name for block."""
-        # StartBlock, EndBlock, RefreshBlock: empty display
-        if isinstance(self.block, (StartBlock, EndBlock, RefreshBlock)):
-            return ""
-
-        # VariableBlock: show "{{varName}} = {{value}}"
-        if isinstance(self.block, VariableBlock):
-            var_name = self.block.variable_name or "var"
-            var_value = self.block.variable_value or ""
-
-            # Truncate value if too long
-            if len(var_value) > 15:
-                var_value = var_value[:15] + "..."
-
-            return f"{{{{{var_name}}}}} = {var_value}"
-
-        # BashBlock: show truncated command
-        if isinstance(self.block, BashBlock):
-            command = self.block.command or "No command"
-            if len(command) > 20:
-                return command[:20] + "..."
-            return command
-
-        # For PromptBlock, show truncated prompt
-        if isinstance(self.block, PromptBlock):
-            prompt = self.block.prompt or "Empty"
-            if len(prompt) > 20:
-                return prompt[:20] + "..."
-            return prompt
-
-        # For CommandBlock, show command name and arguments
-        if isinstance(self.block, CommandBlock):
-            cmd_name = self.block.command_name or "(none)"
-            args = self.block.arguments or ""
-
-            # Combine command name and args
-            if args:
-                display = f"{cmd_name} {args}"
-            else:
-                display = cmd_name
-
+        """Get display name for block (shows block name in big font)."""
+        # Get the block's name property, fall back to type label if empty
+        name = getattr(self.block, 'name', None)
+        if name:
             # Truncate if too long
-            if len(display) > 20:
-                return display[:20] + "..."
-            return display
+            if len(name) > 15:
+                return name[:15] + "..."
+            return name
 
-        # For BranchBlock, show condition
-        if isinstance(self.block, BranchBlock):
-            condition = self.block.condition or "No condition"
-            if len(condition) > 20:
-                condition = condition[:20] + "..."
-            return condition
-
-        # For other blocks, use ID or default
-        return self.block.id[:8] if self.block.id else "New Block"
+        # Fallback: return empty string (type label is already shown)
+        return ""
 
     def _create_ports(self):
         """Create visual connector ports on all 4 edges."""

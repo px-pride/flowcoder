@@ -142,11 +142,19 @@ class MainWindow:
 
     def _create_menu_bar(self):
         """Create menu bar with File, Edit, and Help menus."""
-        self.menu_bar = tk.Menu(self.root)
+        # Dark mode menu colors
+        menu_bg = '#2b2b2b'
+        menu_fg = '#e0e0e0'
+        menu_active_bg = '#4a4a4a'
+        menu_active_fg = '#ffffff'
+
+        self.menu_bar = tk.Menu(self.root, bg=menu_bg, fg=menu_fg,
+                                 activebackground=menu_active_bg, activeforeground=menu_active_fg)
         self.root.config(menu=self.menu_bar)
 
         # File menu
-        self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.file_menu = tk.Menu(self.menu_bar, tearoff=0, bg=menu_bg, fg=menu_fg,
+                                  activebackground=menu_active_bg, activeforeground=menu_active_fg)
         self.menu_bar.add_cascade(label="File", menu=self.file_menu)
         self.file_menu.add_command(label="New Command", command=self.on_new_command, accelerator="Ctrl+N")
         self.file_menu.add_command(label="Open Command", command=self.on_open_command, accelerator="Ctrl+O")
@@ -158,7 +166,8 @@ class MainWindow:
         self.file_menu.add_command(label="Exit", command=self.on_closing, accelerator="Ctrl+Q")
 
         # Edit menu
-        self.edit_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.edit_menu = tk.Menu(self.menu_bar, tearoff=0, bg=menu_bg, fg=menu_fg,
+                                  activebackground=menu_active_bg, activeforeground=menu_active_fg)
         self.menu_bar.add_cascade(label="Edit", menu=self.edit_menu)
         self.edit_menu.add_command(label="Undo", command=self.on_undo, accelerator="Ctrl+Z")
         self.edit_menu.add_command(label="Redo", command=self.on_redo, accelerator="Ctrl+Y")
@@ -170,7 +179,8 @@ class MainWindow:
         self.edit_menu.add_command(label="Select All", command=self.on_select_all, accelerator="Ctrl+A")
 
         # Settings menu
-        self.settings_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.settings_menu = tk.Menu(self.menu_bar, tearoff=0, bg=menu_bg, fg=menu_fg,
+                                      activebackground=menu_active_bg, activeforeground=menu_active_fg)
         self.menu_bar.add_cascade(label="Settings", menu=self.settings_menu)
         self.settings_menu.add_command(label="Set Working Directory...", command=self.on_set_working_directory)
         self.settings_menu.add_command(label="Refresh Claude Connection", command=self.on_refresh_claude)
@@ -178,7 +188,8 @@ class MainWindow:
         self.settings_menu.add_command(label="Preferences", command=self.on_preferences)
 
         # Help menu
-        self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.help_menu = tk.Menu(self.menu_bar, tearoff=0, bg=menu_bg, fg=menu_fg,
+                                  activebackground=menu_active_bg, activeforeground=menu_active_fg)
         self.menu_bar.add_cascade(label="Help", menu=self.help_menu)
         self.help_menu.add_command(label="Documentation", command=self.on_documentation)
         self.help_menu.add_command(label="Keyboard Shortcuts", command=self.on_shortcuts)
@@ -267,11 +278,39 @@ class MainWindow:
         elif 'alt' in available_themes:
             style.theme_use('alt')
 
-        # Configure colors for frames
-        style.configure('TFrame', background='#f0f0f0')
-        style.configure('TLabel', background='#f0f0f0')
+        # Dark mode colors
+        dark_bg = '#2b2b2b'
+        dark_fg = '#e0e0e0'
+        dark_input_bg = '#3c3c3c'
+        dark_select_bg = '#4a4a4a'
 
-        logger.debug(f"Applied theme: {style.theme_use()}")
+        # Configure colors for frames (dark mode)
+        style.configure('TFrame', background=dark_bg)
+        style.configure('TLabel', background=dark_bg, foreground=dark_fg)
+        style.configure('TLabelframe', background=dark_bg, foreground=dark_fg)
+        style.configure('TLabelframe.Label', background=dark_bg, foreground=dark_fg)
+        style.configure('TButton', background=dark_input_bg, foreground=dark_fg)
+        style.configure('TEntry', fieldbackground=dark_input_bg, foreground=dark_fg)
+        style.configure('TCombobox', fieldbackground=dark_input_bg, foreground=dark_fg, selectbackground=dark_select_bg, selectforeground=dark_fg)
+        style.map('TCombobox', fieldbackground=[('readonly', dark_input_bg)], selectbackground=[('readonly', dark_select_bg)])
+        style.configure('TCheckbutton', background=dark_bg, foreground=dark_fg)
+        style.configure('TRadiobutton', background=dark_bg, foreground=dark_fg)
+        style.configure('TNotebook', background=dark_bg)
+        style.configure('TNotebook.Tab', background=dark_input_bg, foreground=dark_fg)
+        style.map('TNotebook.Tab', background=[('selected', dark_select_bg)])
+        style.configure('TScrollbar', background=dark_input_bg, troughcolor=dark_bg, arrowcolor=dark_fg)
+        style.configure('TPanedwindow', background=dark_bg)
+        style.configure('TScale', background=dark_bg)
+
+        # Treeview dark mode styling
+        style.configure('Treeview', background=dark_input_bg, foreground=dark_fg, fieldbackground=dark_input_bg)
+        style.configure('Treeview.Heading', background=dark_bg, foreground=dark_fg)
+        style.map('Treeview', background=[('selected', dark_select_bg)], foreground=[('selected', dark_fg)])
+
+        # Configure root window background
+        self.root.configure(bg=dark_bg)
+
+        logger.debug(f"Applied theme: {style.theme_use()} (dark mode)")
 
     def _initialize_accessibility(self):
         """Initialize accessibility features (Phase 6.2)."""

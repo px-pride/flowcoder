@@ -67,13 +67,20 @@ class SessionsListWidget(ttk.Frame):
         scrollbar = ttk.Scrollbar(list_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Listbox
+        # Listbox (dark mode)
+        dark_bg = '#1e1e1e'
+        dark_fg = '#e0e0e0'
+        dark_select_bg = '#4a4a4a'
         self.listbox = tk.Listbox(
             list_frame,
             yscrollcommand=scrollbar.set,
             font=("Courier New", 10),
             selectmode=tk.SINGLE,
-            height=15
+            height=15,
+            bg=dark_bg,
+            fg=dark_fg,
+            selectbackground=dark_select_bg,
+            selectforeground=dark_fg
         )
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.listbox.yview)

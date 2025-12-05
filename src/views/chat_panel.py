@@ -52,6 +52,11 @@ class ChatPanel(ttk.Frame):
 
     def _create_widgets(self):
         """Create all widgets for the panel."""
+        # Dark mode colors
+        dark_bg = '#1e1e1e'
+        dark_fg = '#e0e0e0'
+        dark_input_bg = '#2d2d2d'
+
         # Title label
         title_label = ttk.Label(self, text="Chat / Output", font=('TkDefaultFont', 12, 'bold'))
         title_label.pack(pady=(5, 10), padx=5, anchor=tk.W)
@@ -92,18 +97,21 @@ class ChatPanel(ttk.Frame):
             wrap=tk.WORD,
             state=tk.DISABLED,
             font=('TkDefaultFont', 10),
-            height=20
+            height=20,
+            bg=dark_bg,
+            fg=dark_fg,
+            insertbackground=dark_fg
         )
         self.output_text.pack(fill=tk.BOTH, expand=True)
 
-        # Configure text tags for Chat tab
-        self.output_text.tag_config('user', foreground='#0066cc')
-        self.output_text.tag_config('claude', foreground='#6600cc')  # Purple for Claude responses
-        self.output_text.tag_config('codex', foreground='#00aa66')  # Green for Codex responses
-        self.output_text.tag_config('mock', foreground='#aa6600')  # Orange for Mock responses
-        self.output_text.tag_config('system', foreground='#666666', font=('TkDefaultFont', 9, 'italic'))
-        self.output_text.tag_config('error', foreground='#cc0000')
-        self.output_text.tag_config('command', foreground='#009900', font=('TkDefaultFont', 10, 'bold'))
+        # Configure text tags for Chat tab (dark mode colors)
+        self.output_text.tag_config('user', foreground='#64B5F6')  # Light blue
+        self.output_text.tag_config('claude', foreground='#CE93D8')  # Light purple for Claude responses
+        self.output_text.tag_config('codex', foreground='#81C784')  # Light green for Codex responses
+        self.output_text.tag_config('mock', foreground='#FFB74D')  # Light orange for Mock responses
+        self.output_text.tag_config('system', foreground='#9E9E9E', font=('TkDefaultFont', 9, 'italic'))
+        self.output_text.tag_config('error', foreground='#EF5350')  # Light red
+        self.output_text.tag_config('command', foreground='#66BB6A', font=('TkDefaultFont', 10, 'bold'))
 
         # Verbose tab (detailed SDK messages)
         verbose_frame = ttk.Frame(self.output_notebook)
@@ -114,25 +122,28 @@ class ChatPanel(ttk.Frame):
             wrap=tk.WORD,
             state=tk.DISABLED,
             font=('Courier', 9),  # Monospace for technical output
-            height=20
+            height=20,
+            bg=dark_bg,
+            fg=dark_fg,
+            insertbackground=dark_fg
         )
         self.verbose_text.pack(fill=tk.BOTH, expand=True)
 
-        # Configure text tags for Verbose tab
-        self.verbose_text.tag_config('user', foreground='#0066cc')
-        self.verbose_text.tag_config('claude', foreground='#6600cc')
-        self.verbose_text.tag_config('codex', foreground='#00aa66')
-        self.verbose_text.tag_config('mock', foreground='#aa6600')
-        self.verbose_text.tag_config('system', foreground='#666666', font=('Courier', 9, 'italic'))
-        self.verbose_text.tag_config('error', foreground='#cc0000')
-        self.verbose_text.tag_config('metadata', foreground='#999999', font=('Courier', 8))
+        # Configure text tags for Verbose tab (dark mode colors)
+        self.verbose_text.tag_config('user', foreground='#64B5F6')
+        self.verbose_text.tag_config('claude', foreground='#CE93D8')
+        self.verbose_text.tag_config('codex', foreground='#81C784')
+        self.verbose_text.tag_config('mock', foreground='#FFB74D')
+        self.verbose_text.tag_config('system', foreground='#9E9E9E', font=('Courier', 9, 'italic'))
+        self.verbose_text.tag_config('error', foreground='#EF5350')
+        self.verbose_text.tag_config('metadata', foreground='#BDBDBD', font=('Courier', 8))
 
         # Typing indicator (between output and input)
         self.typing_indicator = ttk.Label(
             left_pane,
             text="AI is typing...",
             font=('TkDefaultFont', 9, 'italic'),
-            foreground='#666666'
+            foreground='#9E9E9E'
         )
         self.typing_indicator.pack(anchor=tk.W, padx=5, pady=(5, 0))
         self.typing_indicator.pack_forget()  # Hide initially
@@ -158,7 +169,10 @@ class ChatPanel(ttk.Frame):
             wrap=tk.WORD,
             yscrollcommand=input_scroll.set,
             undo=True,  # Enable undo/redo functionality
-            maxundo=-1  # Unlimited undo levels
+            maxundo=-1,  # Unlimited undo levels
+            bg=dark_input_bg,
+            fg=dark_fg,
+            insertbackground=dark_fg
         )
         self.input_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         input_scroll.config(command=self.input_text.yview)

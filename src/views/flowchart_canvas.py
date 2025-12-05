@@ -143,8 +143,8 @@ class FlowchartCanvas(ttk.Frame):
     # Canvas settings
     DEFAULT_WIDTH = 800
     DEFAULT_HEIGHT = 600
-    BACKGROUND_COLOR = '#f8f8f8'
-    GRID_COLOR = '#e0e0e0'
+    BACKGROUND_COLOR = '#1e1e1e'  # Dark mode
+    GRID_COLOR = '#2d2d2d'  # Dark mode
     GRID_SIZE = 50
 
     # Zoom settings

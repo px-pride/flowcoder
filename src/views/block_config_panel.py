@@ -78,8 +78,9 @@ class BlockConfigPanel(ttk.Frame):
         )
         self.title_label.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
 
-        # Scrollable content frame
-        canvas = tk.Canvas(self, highlightthickness=0)
+        # Scrollable content frame (dark mode)
+        dark_bg = '#2b2b2b'
+        canvas = tk.Canvas(self, highlightthickness=0, bg=dark_bg)
         scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=canvas.yview)
         self.content_frame = ttk.Frame(canvas)
 
@@ -244,13 +245,16 @@ class BlockConfigPanel(ttk.Frame):
         )
         help_label_type.pack(anchor=tk.W, padx=10, pady=(0, 10))
 
-        # Variable value
+        # Variable value (dark mode)
         ttk.Label(self.content_frame, text="Variable Value:").pack(anchor=tk.W, padx=10, pady=(10, 0))
         self.variable_value_text = scrolledtext.ScrolledText(
             self.content_frame,
             height=5,
             width=40,
-            wrap=tk.WORD
+            wrap=tk.WORD,
+            bg='#1e1e1e',
+            fg='#e0e0e0',
+            insertbackground='#e0e0e0'
         )
         self.variable_value_text.insert('1.0', block.variable_value)
         self.variable_value_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
@@ -296,13 +300,16 @@ class BlockConfigPanel(ttk.Frame):
         self.name_entry.pack(fill=tk.X, padx=10, pady=(0, 10))
         self.name_entry.bind('<KeyRelease>', self._schedule_autosave)
 
-        # Bash command
+        # Bash command (dark mode)
         ttk.Label(self.content_frame, text="Bash Command:").pack(anchor=tk.W, padx=10, pady=(10, 0))
         self.bash_command_text = scrolledtext.ScrolledText(
             self.content_frame,
             height=8,
             width=40,
-            wrap=tk.WORD
+            wrap=tk.WORD,
+            bg='#1e1e1e',
+            fg='#e0e0e0',
+            insertbackground='#e0e0e0'
         )
         self.bash_command_text.insert('1.0', block.command)
         self.bash_command_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
@@ -436,7 +443,7 @@ class BlockConfigPanel(ttk.Frame):
         # Bind autosave on name change
         self.name_entry.bind('<KeyRelease>', self._schedule_autosave)
 
-        # Prompt text (multi-line)
+        # Prompt text (multi-line, dark mode)
         ttk.Label(self.content_frame, text="Prompt Text:").pack(anchor=tk.W, padx=10, pady=(10, 0))
         self.prompt_text = scrolledtext.ScrolledText(
             self.content_frame,
@@ -444,7 +451,10 @@ class BlockConfigPanel(ttk.Frame):
             wrap=tk.WORD,
             font=('Courier', 10),
             undo=True,  # Enable undo/redo functionality
-            maxundo=-1  # Unlimited undo levels
+            maxundo=-1,  # Unlimited undo levels
+            bg='#1e1e1e',
+            fg='#e0e0e0',
+            insertbackground='#e0e0e0'
         )
         self.prompt_text.insert('1.0', block.prompt)
         self.prompt_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
@@ -470,7 +480,10 @@ class BlockConfigPanel(ttk.Frame):
             wrap=tk.WORD,
             font=('Courier', 9),
             undo=True,  # Enable undo/redo functionality
-            maxundo=-1  # Unlimited undo levels
+            maxundo=-1,  # Unlimited undo levels
+            bg='#1e1e1e',
+            fg='#e0e0e0',
+            insertbackground='#e0e0e0'
         )
         if block.output_schema:
             self.schema_text.insert('1.0', json.dumps(block.output_schema, indent=2))

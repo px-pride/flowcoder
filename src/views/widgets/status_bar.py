@@ -38,52 +38,68 @@ class StatusBar(ttk.Frame):
 
     def _create_ui(self):
         """Create the 3-section status bar layout."""
+        # Dark mode colors
+        dark_bg = '#1e1e1e'
+        dark_fg = '#e0e0e0'
+
         # Left section: Status message
-        self.status_label = ttk.Label(
+        self.status_label = tk.Label(
             self,
             text="Ready",
             anchor=tk.W,
             relief=tk.SUNKEN,
             borderwidth=1,
-            padding=(5, 2)
+            padx=5,
+            pady=2,
+            bg=dark_bg,
+            fg=dark_fg
         )
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Middle section: Session name + state
-        self.session_label = ttk.Label(
+        self.session_label = tk.Label(
             self,
             text="No active session",
             anchor=tk.CENTER,
             relief=tk.SUNKEN,
             borderwidth=1,
-            padding=(5, 2),
-            width=30
+            padx=5,
+            pady=2,
+            width=30,
+            bg=dark_bg,
+            fg=dark_fg
         )
         self.session_label.pack(side=tk.LEFT, fill=tk.X, padx=2)
 
         # Right section: Working directory + connection
-        self.info_frame = ttk.Frame(self)
+        self.info_frame = tk.Frame(self, bg=dark_bg)
         self.info_frame.pack(side=tk.LEFT, fill=tk.X)
 
-        self.dir_label = ttk.Label(
+        self.dir_label = tk.Label(
             self.info_frame,
             text="Working Dir: ~/",
             anchor=tk.W,
             relief=tk.SUNKEN,
             borderwidth=1,
-            padding=(5, 2),
-            width=25
+            padx=5,
+            pady=2,
+            width=25,
+            bg=dark_bg,
+            fg=dark_fg
         )
         self.dir_label.pack(side=tk.LEFT, fill=tk.X, padx=2)
 
-        self.connection_label = ttk.Label(
+        self.connection_label = tk.Label(
             self.info_frame,
             text="Not connected",
             anchor=tk.W,
             relief=tk.SUNKEN,
             borderwidth=1,
-            padding=(5, 2),
-            width=15
+            padx=5,
+            pady=2,
+            width=15,
+            bg=dark_bg,
+            fg=dark_fg
         )
         self.connection_label.pack(side=tk.LEFT, fill=tk.X)
 
@@ -94,7 +110,7 @@ class StatusBar(ttk.Frame):
         Args:
             message: Status text (e.g., "Ready", "Executing...", "File saved")
         """
-        self.status_label.config(text=message)
+        self.status_label.configure(text=message)
         self.update_idletasks()
 
     def set_session(self, session_name: str, state: SessionState = "idle"):
@@ -107,7 +123,7 @@ class StatusBar(ttk.Frame):
         """
         indicator = self.STATE_INDICATORS.get(state, "⚪")
         text = f"{indicator} {session_name}"
-        self.session_label.config(text=text)
+        self.session_label.configure(text=text)
         self.update_idletasks()
 
     def set_working_dir(self, directory: str):
@@ -124,7 +140,7 @@ class StatusBar(ttk.Frame):
         else:
             display_dir = directory
 
-        self.dir_label.config(text=f"Working Dir: {display_dir}")
+        self.dir_label.configure(text=f"Working Dir: {display_dir}")
         self.update_idletasks()
 
     def set_connection_status(self, status: str):
@@ -136,13 +152,13 @@ class StatusBar(ttk.Frame):
         """
         # Color-code connection status
         if status == "Connected":
-            self.connection_label.config(text=f"✓ {status}", foreground="green")
+            self.connection_label.configure(text=f"✓ {status}", fg="#4CAF50")  # Green
         elif status == "Connecting...":
-            self.connection_label.config(text=f"⟳ {status}", foreground="blue")
+            self.connection_label.configure(text=f"⟳ {status}", fg="#2196F3")  # Blue
         elif status == "Error":
-            self.connection_label.config(text=f"✗ {status}", foreground="red")
+            self.connection_label.configure(text=f"✗ {status}", fg="#F44336")  # Red
         else:
-            self.connection_label.config(text=status, foreground="gray")
+            self.connection_label.configure(text=status, fg="#808080")  # Gray
 
         self.update_idletasks()
 

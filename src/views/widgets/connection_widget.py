@@ -26,14 +26,14 @@ class ConnectionWidget:
     LINE_WIDTH_NORMAL = 2
     LINE_WIDTH_SELECTED = 3
     LINE_WIDTH_HOVER = 3
-    COLOR_TRUE_PATH = 'black'  # True path (normal flow)
-    COLOR_FALSE_PATH = 'blue'  # False path (branch condition = False)
+    COLOR_TRUE_PATH = '#e0e0e0'  # Light gray for dark mode (True path)
+    COLOR_FALSE_PATH = '#64B5F6'  # Light blue for dark mode (False path)
     COLOR_SELECTED = '#FFD700'  # Gold
     COLOR_HOVER = '#FFA726'  # Orange
     ARROW_SHAPE = (12, 15, 5)  # Arrow head dimensions (length, width, base_width) - increased for better visibility
     LABEL_FONT = ('Arial', 9)
-    LABEL_BG = '#FFFFFF'
-    LABEL_BORDER = '#CCCCCC'
+    LABEL_BG = '#3c3c3c'  # Dark mode
+    LABEL_BORDER = '#555555'  # Dark mode
 
     # Hit detection
     HIT_TOLERANCE = 8  # Pixels from line to detect click

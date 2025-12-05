@@ -29,15 +29,20 @@ class LineNumberedText(ttk.Frame):
 
     def _create_ui(self, **text_kwargs):
         """Create UI components."""
+        # Dark mode colors
+        dark_bg = '#1e1e1e'
+        dark_fg = '#e0e0e0'
+        dark_line_num_bg = '#2b2b2b'
+
         # Container for line numbers and text
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True)
 
-        # Line numbers canvas
+        # Line numbers canvas (dark mode)
         self.line_numbers = tk.Canvas(
             container,
             width=50,
-            bg='#f0f0f0',
+            bg=dark_line_num_bg,
             highlightthickness=0
         )
         self.line_numbers.pack(side=tk.LEFT, fill=tk.Y)
@@ -52,11 +57,16 @@ class LineNumberedText(ttk.Frame):
         if 'maxundo' not in text_kwargs and text_kwargs.get('undo', True):
             text_kwargs['maxundo'] = -1  # Unlimited undo levels
 
-        # Text widget
+        # Text widget (dark mode)
         self.text = tk.Text(
             container,
             yscrollcommand=self._on_scroll,
             wrap=tk.NONE,
+            bg=dark_bg,
+            fg=dark_fg,
+            insertbackground=dark_fg,
+            selectbackground='#4a4a4a',
+            selectforeground=dark_fg,
             **text_kwargs
         )
         self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -152,7 +162,7 @@ class LineNumberedText(ttk.Frame):
                     45, y,
                     text=str(i),
                     anchor=tk.E,
-                    fill='#666',
+                    fill='#808080',  # Dark mode line numbers
                     font=('Courier', 9)
                 )
 
@@ -217,10 +227,10 @@ class LineNumberedText(ttk.Frame):
             readonly: True to make read-only
         """
         if readonly:
-            self.text.config(state=tk.DISABLED, bg='#f5f5f5')
+            self.text.config(state=tk.DISABLED, bg='#252525')  # Slightly darker for readonly
             logger.debug("Set to read-only")
         else:
-            self.text.config(state=tk.NORMAL, bg='white')
+            self.text.config(state=tk.NORMAL, bg='#1e1e1e')  # Dark mode
             logger.debug("Set to writable")
 
     def set_modified_callback(self, callback):

@@ -123,13 +123,13 @@ class ExecutionHistoryPanel(ttk.Frame):
         self.tree.column('details', width=300, minwidth=200)
         self.tree.column('full_output', width=0, stretch=False)  # Hidden column for storing full output data
 
-        # Tags for styling
+        # Tags for styling (dark mode - brighter colors for visibility)
         self.tree.tag_configure('run', font=('TkDefaultFont', 10, 'bold'))
         self.tree.tag_configure('block', font=('TkDefaultFont', 9))
-        self.tree.tag_configure('success', foreground='#006600')
-        self.tree.tag_configure('error', foreground='#cc0000')
-        self.tree.tag_configure('executing', foreground='#0066cc')
-        self.tree.tag_configure('complete', foreground='#006600')
+        self.tree.tag_configure('success', foreground='#81C784')  # Light green
+        self.tree.tag_configure('error', foreground='#EF5350')  # Light red
+        self.tree.tag_configure('executing', foreground='#64B5F6')  # Light blue
+        self.tree.tag_configure('complete', foreground='#81C784')  # Light green
 
         # Right pane: Detail view
         right_pane = ttk.Frame(main_paned)
@@ -143,12 +143,15 @@ class ExecutionHistoryPanel(ttk.Frame):
         )
         detail_label.pack(anchor=tk.W, padx=5, pady=(0, 2))
 
-        # Detail text area
+        # Detail text area (dark mode)
         self.detail_text = scrolledtext.ScrolledText(
             right_pane,
             wrap=tk.WORD,
             state=tk.DISABLED,
-            font=('Courier', 9)
+            font=('Courier', 9),
+            bg='#1e1e1e',
+            fg='#e0e0e0',
+            insertbackground='#e0e0e0'
         )
         self.detail_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
 

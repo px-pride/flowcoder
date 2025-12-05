@@ -88,12 +88,19 @@ class CommandListPanel(ttk.Frame):
         scrollbar = ttk.Scrollbar(list_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Listbox
+        # Listbox (dark mode)
+        dark_bg = '#1e1e1e'
+        dark_fg = '#e0e0e0'
+        dark_select_bg = '#4a4a4a'
         self.listbox = tk.Listbox(
             list_frame,
             yscrollcommand=scrollbar.set,
             selectmode=tk.SINGLE,
-            font=('TkDefaultFont', 10)
+            font=('TkDefaultFont', 10),
+            bg=dark_bg,
+            fg=dark_fg,
+            selectbackground=dark_select_bg,
+            selectforeground=dark_fg
         )
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.listbox.yview)
