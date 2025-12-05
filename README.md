@@ -129,7 +129,6 @@ Sessions can optionally be configured with:
 
 | Button | Description |
 |--------|-------------|
-| **▶ Start Session** | Starts the agent for the selected session |
 | **⏸ Halt** | Pauses execution after the current block finishes. The session enters a halted state and can be resumed later |
 | **▶ Resume** | Continues execution from where it was halted |
 | **⏹ Stop** | Stops execution after the current block finishes, then terminates the agent process |
