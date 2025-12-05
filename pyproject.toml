@@ -3,7 +3,7 @@ name = "flowcoder"
 version = "1.0.0"
 description = "A visual flowchart builder for creating custom automated workflows with Claude Code and Codex"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "claude-agent-sdk",
     "codex-sdk",
@@ -39,3 +39,8 @@ quote-style = "double"
 [tool.ruff.lint]
 select = ["E", "F", "W"]
 ignore = ["E203"]
+
+[tool.uv]
+# Use system Python to ensure proper Tkinter font support.
+# uv's managed Python builds have isolated Tcl/Tk that lacks fontconfig integration.
+python-preference = "only-system"

@@ -107,7 +107,7 @@ class BlockWidget:
         self.type_text_id = self.canvas.create_text(
             self.x, self.y - 18,
             text=type_label,
-            font=('Helvetica', 8, 'bold'),
+            font=('DejaVu Sans', 8, 'bold'),
             fill='white',
             tags=('block', f'block_{self.block.id}')
         )
@@ -117,7 +117,7 @@ class BlockWidget:
         self.text_id = self.canvas.create_text(
             self.x, self.y + 5,
             text=display_name,
-            font=('Helvetica', 14, 'bold'),
+            font=('DejaVu Sans', 14, 'bold'),
             fill='white',
             width=self.WIDTH - 10,
             tags=('block', f'block_{self.block.id}')
