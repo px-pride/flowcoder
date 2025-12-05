@@ -22,7 +22,7 @@
           "y": 150
         },
         "command_name": "ex0-design-doc",
-        "arguments": "\"Make a plain text editor Electron app. It should have all the features that Notepad on Windows 10 has.\"",
+        "arguments": "\"Make collaborative MS Paint as a webapp that can be run with a local server.\"",
         "inherit_variables": false,
         "merge_output": false
       },
@@ -131,7 +131,7 @@
   },
   "metadata": {
     "created": "2025-12-03T12:52:02.475415",
-    "modified": "2025-12-03T21:50:07.336360",
+    "modified": "2025-12-04T16:01:28.888135",
     "version": "1.0",
     "author": null,
     "tags": []

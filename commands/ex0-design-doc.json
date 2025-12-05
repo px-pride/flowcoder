@@ -21,7 +21,7 @@
           "x": 100,
           "y": 150
         },
-        "prompt": "Don't implement anything yet. Create a design doc in ./design_docs/DESIGN_DOC.md for this task: $1",
+        "prompt": "Don't implement anything yet. Create a design doc in ./design_docs/DESIGN_DOC.md for this task: $1\n\nDO NOT OVERENGINEER. Use the minimal technology stack needed to meet all requirements. Don't reinvent the wheel; use existing libraries as best you can.",
         "output_schema": null,
         "sound_effect": null
       },
@@ -87,7 +87,7 @@
   },
   "metadata": {
     "created": "2025-12-01T02:20:39.676736",
-    "modified": "2025-12-03T17:13:39.992831",
+    "modified": "2025-12-04T01:33:32.503635",
     "version": "1.0",
     "author": null,
     "tags": []
