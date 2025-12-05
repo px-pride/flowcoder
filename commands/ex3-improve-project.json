@@ -16,7 +16,7 @@
       "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5": {
         "id": "5f09bc0d-3618-4b7a-a8ed-75f8a3addfe5",
         "type": "prompt",
-        "name": "DESIGN NEW FEATURE",
+        "name": "DESIGN FEATURE",
         "position": {
           "x": 250,
           "y": 550
@@ -252,7 +252,7 @@
   },
   "metadata": {
     "created": "2025-12-02T18:39:25.499029",
-    "modified": "2025-12-05T02:13:24.498179",
+    "modified": "2025-12-05T03:15:46.288113",
     "version": "1.0",
     "author": null,
     "tags": []
