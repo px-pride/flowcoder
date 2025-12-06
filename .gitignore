@@ -29,6 +29,10 @@ __pycache__/
 # Allow .gitignore itself
 !.gitignore
 
+# Allow .github directory
+!.github/
+!.github/**
+
 # Allow .python-version
 !.python-version
 
