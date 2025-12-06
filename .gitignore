@@ -24,6 +24,7 @@ __pycache__/
 !pyproject.toml
 !README.md
 !uv.lock
+!LICENSE
 
 # Allow .gitignore itself
 !.gitignore
