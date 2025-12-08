@@ -139,10 +139,29 @@ Sessions can optionally be configured with:
 
 ### App crashes with `UnknownLocaleError: unknown locale 'c'`
 
-This occurs on systems where the locale is set to `C` (common in minimal Linux environments, WSL, or Docker). Set a proper locale before running:
+This occurs on systems where the locale is set to `C` (common in minimal Linux environments, WSL, or Docker). 
 
+**Quick fix:**
 ```bash
 LANG=en_US.UTF-8 uv run python -m src.main
+```
+
+**If the above doesn't work** (locale not installed):
+```bash
+# Install locale support
+sudo apt-get update && sudo apt-get install -y locales
+
+# Generate en_US.UTF-8 locale
+sudo locale-gen en_US.UTF-8
+
+# Run the app
+LANG=en_US.UTF-8 uv run python -m src.main
+```
+
+**Alternative locales** if en_US.UTF-8 is unavailable:
+```bash
+# Try C.UTF-8 (usually available)
+LC_ALL=C.UTF-8 uv run python -m src.main
 ```
 
 To make it permanent, add `export LANG=en_US.UTF-8` to your `~/.bashrc`.
