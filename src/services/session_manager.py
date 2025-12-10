@@ -200,7 +200,7 @@ class SessionManager:
                 session.agent_service = ServiceFactory.create_service(
                     service_type=session.service_type,
                     cwd=session.working_directory,
-                    system_prompt=session.system_prompt or "You are a helpful assistant.",
+                    system_prompt=session.system_prompt,
                     permission_mode="bypassPermissions"
                 )
                 logger.info(f"Created new {session.service_type} service for session '{session_name}'")
@@ -309,7 +309,7 @@ class SessionManager:
             session.agent_service = ServiceFactory.create_service(
                 service_type=session.service_type,
                 cwd=session.working_directory,
-                system_prompt=session.system_prompt or "You are a helpful assistant.",
+                system_prompt=session.system_prompt,
                 permission_mode="bypassPermissions"  # Skip permission prompts for automation
             )
             logger.info(f"Initialized {session.service_type} service for session '{name}'")
@@ -654,7 +654,7 @@ class SessionManager:
                         session.agent_service = ServiceFactory.create_service(
                             service_type=session.service_type,
                             cwd=session.working_directory,
-                            system_prompt=session.system_prompt or "You are a helpful assistant.",
+                            system_prompt=session.system_prompt,
                             permission_mode="bypassPermissions"
                         )
                         logger.info(f"Initialized {session.service_type} service for loaded session '{name}'")

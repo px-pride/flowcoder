@@ -125,20 +125,26 @@ class ClaudeAgentService(BaseService):
             return  # Allow multiple calls - session already running
 
         try:
-            # Use None for empty system_prompt to let Claude Code use its default
-            system_prompt_value = self.system_prompt if self.system_prompt else None
-
-            options = ClaudeAgentOptions(
-                system_prompt=system_prompt_value,
-                permission_mode=self.permission_mode,
-                cwd=self.cwd,
-                model=self.model,
-                env={
+            # Build options dict, only including system_prompt if provided
+            # When system_prompt is None/empty, we don't pass it at all so
+            # Claude Code uses its built-in default (passing None would cause
+            # the SDK to pass --system-prompt "" which overrides the default)
+            options_kwargs = {
+                "permission_mode": self.permission_mode,
+                "cwd": self.cwd,
+                "model": self.model,
+                "env": {
                     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000"
                 },
-                include_partial_messages=True,  # Show intermediate reasoning as it happens
-                stderr=self.stderr_callback  # Capture tool calls, thinking, file operations
-            )
+                "include_partial_messages": True,  # Show intermediate reasoning as it happens
+                "stderr": self.stderr_callback  # Capture tool calls, thinking, file operations
+            }
+
+            # Only add system_prompt if it's a non-empty string
+            if self.system_prompt:
+                options_kwargs["system_prompt"] = self.system_prompt
+
+            options = ClaudeAgentOptions(**options_kwargs)
 
             self._client = ClaudeSDKClient(options=options)
             await self._client.__aenter__()

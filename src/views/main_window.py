@@ -90,7 +90,6 @@ class MainWindow:
             logger.info(f"Using real ClaudeAgentService with cwd={self.working_directory}")
             self.agent_service = ClaudeAgentService(
                 cwd=self.working_directory,
-                system_prompt="You are a helpful assistant that helps users create automated workflows.",
                 permission_mode="bypassPermissions",
                 stderr_callback=self._on_claude_stderr,
                 model="claude-opus-4-5"
@@ -565,7 +564,6 @@ class MainWindow:
                 logger.info(f"Reinitializing ClaudeAgentService with cwd={self.working_directory}")
                 self.agent_service = ClaudeAgentService(
                     cwd=self.working_directory,
-                    system_prompt="You are a helpful assistant that helps users create automated workflows.",
                     permission_mode="bypassPermissions",
                     stderr_callback=self._on_claude_stderr,
                     model="claude-opus-4-5"
@@ -1257,7 +1255,6 @@ Created with Claude Agent SDK
                 logger.info(f"Reinitializing ClaudeAgentService with cwd={self.working_directory}")
                 self.agent_service = ClaudeAgentService(
                     cwd=self.working_directory,
-                    system_prompt="You are a helpful assistant that helps users create automated workflows.",
                     permission_mode="bypassPermissions",
                     stderr_callback=self._on_claude_stderr,
                     model="claude-opus-4-5"
