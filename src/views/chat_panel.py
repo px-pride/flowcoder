@@ -362,6 +362,10 @@ class ChatPanel(ttk.Frame):
             text: Text to append
             tag: Text tag for styling
         """
+        # Skip empty strings (but allow whitespace like newlines for formatting)
+        if not text:
+            return
+
         self.output_text.config(state=tk.NORMAL)
         self.output_text.insert(tk.END, text, tag)
 
@@ -427,6 +431,10 @@ class ChatPanel(ttk.Frame):
             message: Message text to display in verbose tab
             tag: Text tag for styling
         """
+        # Skip empty or whitespace-only messages
+        if not message or not message.strip():
+            return
+
         self.verbose_text.config(state=tk.NORMAL)
 
         # Add timestamp
@@ -447,6 +455,10 @@ class ChatPanel(ttk.Frame):
             text: Text to append
             tag: Text tag for styling
         """
+        # Skip empty strings (but allow whitespace like newlines for formatting)
+        if not text:
+            return
+
         self.verbose_text.config(state=tk.NORMAL)
         self.verbose_text.insert(tk.END, text, tag)
         self.verbose_text.see(tk.END)

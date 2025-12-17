@@ -21,6 +21,7 @@ from ..utils import (
     validate_git_branch_name,
     GitWorkflowOrchestrator,
 )
+from .collapsible_frame import CollapsibleFrame
 
 logger = logging.getLogger(__name__)
 
@@ -140,30 +141,33 @@ class SessionTabWidget(ttk.Frame):
             )
             restart_btn.pack(side=tk.RIGHT, padx=5)
 
-        # Session info panel (working directory, service, and system prompt)
-        info_frame = ttk.LabelFrame(self, text="Session Information", padding=5)
+        # Session info panel (working directory, service, and system prompt) - collapsible
+        info_frame = CollapsibleFrame(self, title="Session Information", collapsed=True, padding=5)
         info_frame.pack(fill=tk.X, pady=(0, 5))
         info_frame.columnconfigure(1, weight=1)
+
+        # Get the content frame for adding child widgets
+        info_content = info_frame.content_frame
 
         # AI Service
         from ..services.service_factory import ServiceFactory
         service_display = ServiceFactory.get_service_display_name(self.session.service_type)
 
-        svc_label = ttk.Label(info_frame, text="AI Service:", font=('TkDefaultFont', 9, 'bold'))
+        svc_label = ttk.Label(info_content, text="AI Service:", font=('TkDefaultFont', 9, 'bold'))
         svc_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
 
-        svc_value = ttk.Label(info_frame, text=service_display, font=('TkDefaultFont', 9))
+        svc_value = ttk.Label(info_content, text=service_display, font=('TkDefaultFont', 9))
         svc_value.grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
 
         # Working directory
-        wd_label = ttk.Label(info_frame, text="Working Directory:", font=('TkDefaultFont', 9, 'bold'))
+        wd_label = ttk.Label(info_content, text="Working Directory:", font=('TkDefaultFont', 9, 'bold'))
         wd_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
 
-        wd_value = ttk.Label(info_frame, text=self.session.working_directory, font=('TkDefaultFont', 9))
+        wd_value = ttk.Label(info_content, text=self.session.working_directory, font=('TkDefaultFont', 9))
         wd_value.grid(row=1, column=1, sticky=tk.W, padx=5, pady=2)
 
         # System prompt
-        sp_label = ttk.Label(info_frame, text="System Prompt:", font=('TkDefaultFont', 9, 'bold'))
+        sp_label = ttk.Label(info_content, text="System Prompt:", font=('TkDefaultFont', 9, 'bold'))
         sp_label.grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
 
         # Truncate system prompt if it's very long
@@ -171,28 +175,28 @@ class SessionTabWidget(ttk.Frame):
         if len(system_prompt_display) > 100:
             system_prompt_display = system_prompt_display[:97] + "..."
 
-        sp_value = ttk.Label(info_frame, text=system_prompt_display, font=('TkDefaultFont', 9))
+        sp_value = ttk.Label(info_content, text=system_prompt_display, font=('TkDefaultFont', 9))
         sp_value.grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
 
-        ttk.Label(info_frame, text="Git Repo URL:", font=('TkDefaultFont', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(info_content, text="Git Repo URL:", font=('TkDefaultFont', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
         self.git_repo_var = tk.StringVar(value=self.session.git_repo_url or "")
-        self.git_repo_entry = ttk.Entry(info_frame, textvariable=self.git_repo_var)
+        self.git_repo_entry = ttk.Entry(info_content, textvariable=self.git_repo_var)
         self.git_repo_entry.grid(row=3, column=1, sticky=tk.EW, padx=5, pady=2)
 
         ttk.Label(
-            info_frame,
+            info_content,
             text="Example: https://github.com/org/repo.git or git@github.com:org/repo.git",
             font=('TkDefaultFont', 8),
             foreground="gray"
         ).grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(0, 4))
 
-        ttk.Label(info_frame, text="Git Branch:", font=('TkDefaultFont', 9, 'bold')).grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(info_content, text="Git Branch:", font=('TkDefaultFont', 9, 'bold')).grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
         self.git_branch_var = tk.StringVar(value=self.session.git_branch or "")
-        self.git_branch_entry = ttk.Entry(info_frame, textvariable=self.git_branch_var)
+        self.git_branch_entry = ttk.Entry(info_content, textvariable=self.git_branch_var)
         self.git_branch_entry.grid(row=5, column=1, sticky=tk.EW, padx=5, pady=2)
 
         ttk.Label(
-            info_frame,
+            info_content,
             text="Allowed: letters, numbers, '/', '.', '_', '-'. Leave blank to track default branch.",
             font=('TkDefaultFont', 8),
             foreground="gray"
@@ -200,17 +204,17 @@ class SessionTabWidget(ttk.Frame):
 
         self.git_auto_push_var = tk.BooleanVar(value=self.session.git_auto_push)
         self.git_auto_push_check = ttk.Checkbutton(
-            info_frame,
+            info_content,
             text="Auto-push",
             variable=self.git_auto_push_var
         )
         self.git_auto_push_check.grid(row=7, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(2, 0))
 
-        self.git_save_btn = ttk.Button(info_frame, text="Save Git Settings", command=self._save_git_settings)
+        self.git_save_btn = ttk.Button(info_content, text="Save Git Settings", command=self._save_git_settings)
         self.git_save_btn.grid(row=8, column=0, columnspan=2, sticky=tk.E, padx=5, pady=(5, 0))
 
         self.git_retry_btn = ttk.Button(
-            info_frame,
+            info_content,
             text="Retry Git Sync",
             command=self._retry_git_workflow,
             state=tk.DISABLED
