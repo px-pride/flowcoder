@@ -266,6 +266,9 @@ class AgentsTab(ttk.Frame):
             session_manager=self.session_manager
         )
 
+        # Pass main_window reference for last contact tracking
+        widget.main_window = self.main_window
+
         # Store in map (but don't pack yet)
         self.session_widgets[session.name] = widget
 

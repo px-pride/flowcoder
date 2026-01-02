@@ -63,6 +63,9 @@ class SessionTabWidget(ttk.Frame):
         # Flag to track if widget has been destroyed (for callback guards)
         self._is_destroyed = False
 
+        # Tool execution tracking
+        self._active_tools = {}  # tool_use_id -> {'name': str, 'start_time': float, 'input': str}
+
         self._create_ui()
 
         # Wire up execution controller callbacks for UI updates
@@ -457,43 +460,56 @@ class SessionTabWidget(ttk.Frame):
 
                 # First check if this is a content_block_delta event
                 # Use flexible string matching to handle both escaped and unescaped quotes
-                if "content_block_delta" in message_str and "text_delta" in message_str:
-                    # Extract the text value using regex
-                    # Match various quote combinations to handle Python's repr() escaping
-                    import re
+                if "content_block_delta" in message_str:
+                    if "text_delta" in message_str:
+                        # Extract the text value using regex
+                        # Match various quote combinations to handle Python's repr() escaping
+                        import re
 
-                    # Try different patterns (repr() uses different quote combinations)
-                    patterns = [
-                        r"'text':\s*'((?:[^'\\]|\\.)*)'",      # 'text': '...'
-                        r'"text":\s*"((?:[^"\\]|\\.)*)"',      # "text": "..."
-                        r"\\'text\\':\s*\"((?:[^\"\\]|\\.)*?)\"",  # \'text\': "..." (escaped key, double value)
-                        r"'text':\s*\"((?:[^\"\\]|\\.)*?)\"",  # 'text': "..." (unescaped key, double value)
-                    ]
+                        # Try different patterns (repr() uses different quote combinations)
+                        patterns = [
+                            r"'text':\s*'((?:[^'\\]|\\.)*)'",      # 'text': '...'
+                            r'"text":\s*"((?:[^"\\]|\\.)*)"',      # "text": "..."
+                            r"\\'text\\':\s*\"((?:[^\"\\]|\\.)*?)\"",  # \'text\': "..." (escaped key, double value)
+                            r"'text':\s*\"((?:[^\"\\]|\\.)*?)\"",  # 'text': "..." (unescaped key, double value)
+                        ]
 
-                    text_match = None
-                    for pattern in patterns:
-                        text_match = re.search(pattern, message_str)
+                        text_match = None
+                        for pattern in patterns:
+                            text_match = re.search(pattern, message_str)
+                            if text_match:
+                                break
+
                         if text_match:
-                            break
+                            message_type = "text_delta"  # Changed from "assistant" to distinguish from AssistantMessage
+                            # Extract the text and unescape it
+                            text_content = text_match.group(1)
+                            # Unescape common escape sequences
+                            text_content = text_content.replace('\\n', '\n')
+                            text_content = text_content.replace('\\t', '\t')
+                            text_content = text_content.replace('\\r', '\r')
+                            text_content = text_content.replace("\\'", "'")
+                            text_content = text_content.replace('\\"', '"')
+                            text_content = text_content.replace('\\\\', '\\')
 
-                    if text_match:
-                        message_type = "text_delta"  # Changed from "assistant" to distinguish from AssistantMessage
-                        # Extract the text and unescape it
-                        text_content = text_match.group(1)
-                        # Unescape common escape sequences
-                        text_content = text_content.replace('\\n', '\n')
-                        text_content = text_content.replace('\\t', '\t')
-                        text_content = text_content.replace('\\r', '\r')
-                        text_content = text_content.replace("\\'", "'")
-                        text_content = text_content.replace('\\"', '"')
-                        text_content = text_content.replace('\\\\', '\\')
+                            verbose_content = f"[StreamEvent] {text_content}"
+                            logger.debug(f"Parsed StreamEvent chunk: {len(text_content)} chars")
+                            return (text_content, verbose_content, message_type)
 
-                        verbose_content = f"[StreamEvent] {text_content}"
-                        logger.debug(f"Parsed StreamEvent chunk: {len(text_content)} chars")
-                        return (text_content, verbose_content, message_type)
+                    elif "input_json_delta" in message_str:
+                        # Extract partial tool input JSON
+                        partial_json = self._extract_partial_json(message_str)
+                        return (partial_json, "", "tool_input_delta")
 
                 # Check for other event types
                 if "content_block_start" in message_str:
+                    # Check if this is a tool_use block
+                    if "'type': 'tool_use'" in message_str or '"type": "tool_use"' in message_str:
+                        # Extract tool name and ID
+                        tool_info = self._extract_tool_use_info(message_str)
+                        if tool_info:
+                            return (str(tool_info), "", "tool_use_start")
+
                     return ("", "", "content_block_start")
 
                 event_type_checks = [
@@ -531,8 +547,14 @@ class SessionTabWidget(ttk.Frame):
                 text_content = "[System initialization]"
 
             elif "UserMessage" in message_str:
-                # Tool results - filter these out, don't display
                 message_type = "result"
+
+                # Check if this contains a ToolResultBlock
+                if "ToolResultBlock" in message_str:
+                    tool_result_info = self._extract_tool_result_info(message_str)
+                    if tool_result_info:
+                        return (str(tool_result_info), "", "tool_result")
+
                 text_content = ""  # Don't extract text, just classify as result
 
             elif "ResultMessage" in message_str:
@@ -601,6 +623,116 @@ class SessionTabWidget(ttk.Frame):
             logger.debug(f"Parsed plain text chunk: {len(text_content)} chars")
 
         return (text_content, verbose_content, message_type)
+
+    def _extract_tool_use_info(self, message_str: str) -> dict:
+        """
+        Extract tool use metadata from content_block_start event.
+
+        Args:
+            message_str: String representation of StreamEvent
+
+        Returns:
+            dict with keys: name, id, input (partial or complete)
+        """
+        import re
+        tool_info = {}
+
+        # Extract tool name: 'name': 'bash_execute'
+        name_patterns = [
+            r"'name':\s*'([^']+)'",
+            r'"name":\s*"([^"]+)"',
+        ]
+        for pattern in name_patterns:
+            match = re.search(pattern, message_str)
+            if match:
+                tool_info['name'] = match.group(1)
+                break
+
+        # Extract tool_use_id: 'id': 'toolu_01ABC123'
+        id_patterns = [
+            r"'id':\s*'([^']+)'",
+            r'"id":\s*"([^"]+)"',
+        ]
+        for pattern in id_patterns:
+            match = re.search(pattern, message_str)
+            if match:
+                tool_info['id'] = match.group(1)
+                break
+
+        # Extract input (may be empty initially)
+        input_patterns = [
+            r"'input':\s*({[^}]*})",
+            r'"input":\s*({[^}]*})',
+        ]
+        for pattern in input_patterns:
+            match = re.search(pattern, message_str)
+            if match:
+                try:
+                    import json
+                    tool_info['input'] = json.loads(match.group(1))
+                except:
+                    tool_info['input'] = {}
+                break
+
+        return tool_info if 'name' in tool_info else None
+
+    def _extract_partial_json(self, message_str: str) -> str:
+        """
+        Extract partial_json field from input_json_delta event.
+
+        Returns:
+            Partial JSON string to append to tool input
+        """
+        import re
+        patterns = [
+            r"'partial_json':\s*'([^']*)'",
+            r'"partial_json":\s*"([^"]*)"',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, message_str)
+            if match:
+                return match.group(1)
+        return ""
+
+    def _extract_tool_result_info(self, message_str: str) -> dict:
+        """
+        Extract tool result from ToolResultBlock in UserMessage.
+
+        Returns:
+            dict with keys: tool_use_id, content, is_error
+        """
+        import re
+        result_info = {}
+
+        # Extract tool_use_id
+        id_patterns = [
+            r"tool_use_id='([^']+)'",
+            r'tool_use_id="([^"]+)"',
+        ]
+        for pattern in id_patterns:
+            match = re.search(pattern, message_str)
+            if match:
+                result_info['tool_use_id'] = match.group(1)
+                break
+
+        # Extract content
+        content_patterns = [
+            r"content='([^']*)'",
+            r'content="([^"]*)"',
+        ]
+        for pattern in content_patterns:
+            match = re.search(pattern, message_str)
+            if match:
+                result_info['content'] = match.group(1).replace('\\n', '\n')
+                break
+
+        # Extract is_error flag
+        if 'is_error=True' in message_str:
+            result_info['is_error'] = True
+        else:
+            result_info['is_error'] = False
+
+        return result_info if 'tool_use_id' in result_info else None
 
     async def _send_passthrough_message_async(self, message: str):
         """
@@ -1073,6 +1205,10 @@ class SessionTabWidget(ttk.Frame):
         if not self._widget_exists():
             return
 
+        # Update last contact timestamp
+        if hasattr(self, 'main_window') and self.main_window:
+            self.main_window._update_last_contact_time()
+
         if chunk == "":
             # Get service display name and tag
             from ..services.service_factory import ServiceFactory
@@ -1195,6 +1331,61 @@ class SessionTabWidget(ttk.Frame):
 
                     self.chat_panel.add_streaming_text(text_content, tag=self._service_tag)
                     self.chat_panel.add_verbose_streaming_text(text_content, tag=self._service_tag)
+
+            elif message_type == "tool_use_start":
+                # text_content is the tool_info dict as string from parsing
+                tool_info = eval(text_content)  # Safe because we generated it
+                tool_id = tool_info.get('id')
+                tool_name = tool_info.get('name')
+
+                if tool_id:
+                    import time
+                    self._active_tools[tool_id] = {
+                        'name': tool_name,
+                        'start_time': time.time(),
+                        'input': ''
+                    }
+
+                    # Display in both tabs
+                    self.chat_panel.add_tool_start(tool_name)
+                    self.chat_panel.add_verbose_tool_start(tool_name, tool_id, tool_info.get('input', {}))
+
+            elif message_type == "tool_input_delta":
+                # Accumulate streaming tool input (for verbose display)
+                # text_content is the partial JSON string
+                # Note: We track which tool this belongs to by using the last active tool
+                if self._active_tools:
+                    # Get the most recent active tool
+                    last_tool_id = list(self._active_tools.keys())[-1]
+                    self._active_tools[last_tool_id]['input'] += text_content
+
+                    # Update verbose display with streaming input
+                    self.chat_panel.add_verbose_streaming_text(text_content, tag='metadata')
+
+            elif message_type == "tool_result":
+                # text_content is the tool_result_info dict as string from parsing
+                tool_result_info = eval(text_content)  # Safe because we generated it
+                tool_id = tool_result_info['tool_use_id']
+
+                # Calculate execution time
+                if tool_id in self._active_tools:
+                    import time
+                    start_time = self._active_tools[tool_id]['start_time']
+                    duration = time.time() - start_time
+                    tool_name = self._active_tools[tool_id]['name']
+
+                    # Display completion in both tabs
+                    self.chat_panel.update_tool_complete(tool_name, duration)
+                    self.chat_panel.add_verbose_tool_result(
+                        tool_name,
+                        tool_id,
+                        tool_result_info.get('content', ''),
+                        tool_result_info.get('is_error', False),
+                        duration
+                    )
+
+                    # Clean up state
+                    del self._active_tools[tool_id]
 
     def _on_restart_clicked(self):
         """Handle Restart Session button click."""

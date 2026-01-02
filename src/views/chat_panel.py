@@ -45,6 +45,7 @@ class ChatPanel(ttk.Frame):
         self.on_message_sent = on_message_sent
         self.on_slash_command = on_slash_command
         self._chat_output_log = None  # Log file for capturing exact chat output
+        self._last_tool_line = None  # Track last tool line for updates
 
         self._create_widgets()
 
@@ -419,6 +420,59 @@ class ChatPanel(ttk.Frame):
         self.output_text.see(tk.END)
         self.output_text.config(state=tk.DISABLED)
 
+    def add_tool_start(self, tool_name: str, tag: str = 'system'):
+        """
+        Display tool execution start in Chat tab.
+
+        Args:
+            tool_name: Name of the tool being executed
+            tag: Text tag for styling
+        """
+        self.output_text.config(state=tk.NORMAL)
+
+        # Format: 🔧 [tool_name] Running...
+        tool_line = f"🔧 [{tool_name}] Running..."
+        self.output_text.insert(tk.END, tool_line, tag)
+
+        # Store the line position so we can update it later
+        end_pos = self.output_text.index(tk.END)
+        line_num = int(end_pos.split('.')[0]) - 1
+        self._last_tool_line = line_num
+
+        self.output_text.see(tk.END)
+        self.output_text.config(state=tk.DISABLED)
+        self.output_text.update_idletasks()
+
+    def update_tool_complete(self, tool_name: str, duration: float, tag: str = 'system'):
+        """
+        Update the tool line to show completion.
+
+        Args:
+            tool_name: Name of the tool that completed
+            duration: Execution time in seconds
+            tag: Text tag for styling
+        """
+        if not hasattr(self, '_last_tool_line') or self._last_tool_line is None:
+            return
+
+        self.output_text.config(state=tk.NORMAL)
+
+        # Delete the "Running..." line
+        line_start = f"{self._last_tool_line}.0"
+        line_end = f"{self._last_tool_line}.end"
+        self.output_text.delete(line_start, line_end)
+
+        # Insert updated line: 🔧 [tool_name] ✓ Completed (X.Xs)
+        tool_line = f"🔧 [{tool_name}] ✓ Completed ({duration:.1f}s)"
+        self.output_text.insert(line_start, tool_line, tag)
+
+        # Add newline
+        self.output_text.insert(f"{self._last_tool_line}.end", "\n")
+
+        self.output_text.see(tk.END)
+        self.output_text.config(state=tk.DISABLED)
+        self.output_text.update_idletasks()
+
     def add_verbose_message(self, message: str, tag: str = 'metadata'):
         """
         Add a message to the verbose tab.
@@ -477,3 +531,75 @@ class ChatPanel(ttk.Frame):
         self.verbose_text.insert(tk.END, "\n")
         self.verbose_text.see(tk.END)
         self.verbose_text.config(state=tk.DISABLED)
+
+    def add_verbose_tool_start(self, tool_name: str, tool_id: str, tool_input: dict, tag: str = 'metadata'):
+        """
+        Display detailed tool start information in Verbose tab.
+
+        Args:
+            tool_name: Name of the tool
+            tool_id: Tool use ID (e.g., toolu_01ABC123)
+            tool_input: Dictionary of tool input parameters
+            tag: Text tag for styling
+        """
+        import json
+        from datetime import datetime
+
+        self.verbose_text.config(state=tk.NORMAL)
+
+        # Add timestamp
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.verbose_text.insert(tk.END, f"[{timestamp}] ", 'system')
+
+        # Tool header
+        header = f"🔧 [Tool Started] {tool_name} ({tool_id})\n"
+        self.verbose_text.insert(tk.END, header, tag)
+
+        # Input parameters (formatted JSON)
+        if tool_input:
+            input_json = json.dumps(tool_input, indent=2)
+            input_text = f"   Input: {input_json}\n"
+            self.verbose_text.insert(tk.END, input_text, tag)
+
+        self.verbose_text.see(tk.END)
+        self.verbose_text.config(state=tk.DISABLED)
+        self.verbose_text.update_idletasks()
+
+    def add_verbose_tool_result(self, tool_name: str, tool_id: str, content: str,
+                                 is_error: bool, duration: float, tag: str = 'metadata'):
+        """
+        Display tool completion with result in Verbose tab.
+
+        Args:
+            tool_name: Name of the tool
+            tool_id: Tool use ID
+            content: Tool output/result
+            is_error: Whether the tool execution failed
+            duration: Execution time in seconds
+            tag: Text tag for styling
+        """
+        from datetime import datetime
+
+        self.verbose_text.config(state=tk.NORMAL)
+
+        # Add timestamp
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.verbose_text.insert(tk.END, f"[{timestamp}] ", 'system')
+
+        # Tool completion header
+        status = "❌ Error" if is_error else "✓ Completed"
+        header = f"🔧 [Tool {status}] {tool_name} ({duration:.1f}s)\n"
+        result_tag = 'error' if is_error else tag
+        self.verbose_text.insert(tk.END, header, result_tag)
+
+        # Output (indented, first 500 chars)
+        if content:
+            output_preview = content[:500]
+            if len(content) > 500:
+                output_preview += "... (truncated)"
+            output_text = f"   Output: {output_preview}\n"
+            self.verbose_text.insert(tk.END, output_text, tag)
+
+        self.verbose_text.see(tk.END)
+        self.verbose_text.config(state=tk.DISABLED)
+        self.verbose_text.update_idletasks()

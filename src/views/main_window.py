@@ -111,6 +111,10 @@ class MainWindow:
         # Track async tasks for cleanup
         self._async_tasks: List[asyncio.Task] = []
 
+        # Last contact tracking
+        self._last_contact_time = None
+        self._status_update_job = None
+
         # Create and configure asyncio event loop for Tkinter integration
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -263,7 +267,47 @@ class MainWindow:
         self.status_bar.set_working_dir(self.working_directory)
         self.status_bar.set_connection_status("Not connected")
 
+        # Add last activity label to status bar
+        self.last_contact_label = ttk.Label(
+            self.status_bar,
+            text="Last activity: --",
+            font=('TkDefaultFont', 9),
+            foreground='#9E9E9E'
+        )
+        self.last_contact_label.pack(side=tk.RIGHT, padx=10)
+
         logger.debug("Enhanced status bar created")
+
+    def _update_last_contact_time(self):
+        """Record the current time as last contact from Claude."""
+        import time
+        self._last_contact_time = time.time()
+
+        # Start the status update loop if not already running
+        if not self._status_update_job:
+            self._update_status_display()
+
+    def _update_status_display(self):
+        """Update the 'Last activity' display every second."""
+        if not self._last_contact_time:
+            self.last_contact_label.config(text="Last activity: --")
+        else:
+            import time
+            elapsed = time.time() - self._last_contact_time
+
+            if elapsed < 1:
+                time_str = "just now"
+            elif elapsed < 60:
+                time_str = f"{int(elapsed)}s ago"
+            elif elapsed < 3600:
+                time_str = f"{int(elapsed / 60)}m ago"
+            else:
+                time_str = f"{int(elapsed / 3600)}h ago"
+
+            self.last_contact_label.config(text=f"Last activity: {time_str}")
+
+        # Schedule next update in 1 second
+        self._status_update_job = self.root.after(1000, self._update_status_display)
 
     def _apply_styling(self):
         """Apply basic styling and theme."""
@@ -1361,6 +1405,9 @@ Created with Claude Agent SDK
             prompt_text: The prompt being executed
             chunk: Streaming chunk (empty string = start of prompt)
         """
+        # Update last contact timestamp
+        self._update_last_contact_time()
+
         if chunk == "":
             # Start of prompt - show what we're asking Claude
             self.chat_panel.add_message(f"Prompt: {prompt_text}", tag='user')
