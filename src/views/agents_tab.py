@@ -298,6 +298,11 @@ class AgentsTab(ttk.Frame):
         # Update control buttons state
         self._update_control_buttons()
 
+        # Update storage service project directory to match session's working directory
+        session = self.session_manager.get_session(session_name)
+        if session and hasattr(self.main_window, 'on_session_working_dir_changed'):
+            self.main_window.on_session_working_dir_changed(session.working_directory)
+
     def on_new_session(self):
         """Handle New Session button - show dialog to create new session."""
         logger.info("New Session button clicked")

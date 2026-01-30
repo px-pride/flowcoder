@@ -56,8 +56,12 @@ class MainWindow:
         # Initialize UI controller (first, as other components may use it)
         self.ui_controller = UIController(self.root)
 
-        # Initialize storage service
-        self.storage_service = StorageService()
+        # Working directory for operations (set early, used by storage service)
+        import os
+        self.working_directory = os.getcwd()
+
+        # Initialize storage service with project directory for three-tier command loading
+        self.storage_service = StorageService(project_dir=self.working_directory)
 
         # Initialize session manager (shared by Agents and Files tabs)
         from src.services.session_manager import SessionManager
@@ -74,10 +78,6 @@ class MainWindow:
 
         # Initialize audio service
         self.audio_service = AudioService()
-
-        # Working directory for Claude operations
-        import os
-        self.working_directory = os.getcwd()
 
         # Initialize Claude service and execution controller
         # Use real Claude Agent SDK by default, MockClaudeService for testing
@@ -776,6 +776,27 @@ A GUI drag-and-drop meta-agent builder for Claude Code.
 Created with Claude Agent SDK
         """
         messagebox.showinfo("About FlowCoder", about_text)
+
+    def on_session_working_dir_changed(self, working_directory: str):
+        """
+        Handle session working directory change.
+
+        Called when user selects a different session. Updates the storage service
+        to show commands from the new session's project directory.
+
+        Args:
+            working_directory: The selected session's working directory
+        """
+        logger.info(f"Session working directory changed to: {working_directory}")
+
+        # Update storage service to use new project directory
+        self.storage_service.set_project_dir(working_directory)
+
+        # Refresh command list to show commands from new project directory
+        if hasattr(self, 'commands_tab') and self.commands_tab:
+            if hasattr(self.commands_tab, 'command_list_panel'):
+                self.commands_tab.command_list_panel.refresh()
+                logger.debug("Command list refreshed for new project directory")
 
     def on_closing(self):
         """Handle window close event."""

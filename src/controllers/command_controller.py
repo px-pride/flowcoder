@@ -107,12 +107,13 @@ class CommandController:
             logger.error(f"Failed to create command '{name}': {e}")
             raise StorageError(f"Failed to create command: {e}") from e
 
-    def load_command(self, name: str) -> Command:
+    def load_command(self, name: str, source: Optional[str] = None) -> Command:
         """
         Load a command by name.
 
         Args:
             name: Command name
+            source: Optional source tier ('proj', 'user', 'fc')
 
         Returns:
             The loaded command
@@ -121,8 +122,8 @@ class CommandController:
             StorageError: If command doesn't exist or load fails
         """
         try:
-            command = self.storage_service.load_command(name)
-            logger.info(f"Loaded command: {name}")
+            command = self.storage_service.load_command(name, source=source)
+            logger.info(f"Loaded command: {name} (source={source})")
             return command
         except Exception as e:
             logger.error(f"Failed to load command '{name}': {e}")

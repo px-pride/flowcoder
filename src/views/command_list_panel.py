@@ -171,13 +171,20 @@ class CommandListPanel(ttk.Frame):
 
         # Add filtered commands
         for metadata in self.filtered_metadata:
+            # Get source indicator
+            source = metadata.get('source', 'fc')
+            source_suffix = f" ({source})"
+
+            # Build display text
             display_text = metadata['name']
             if metadata.get('description'):
-                # Truncate long descriptions
-                desc = metadata['description'][:50]
-                if len(metadata['description']) > 50:
+                # Truncate long descriptions, accounting for source suffix
+                max_desc_len = 50 - len(source_suffix)
+                desc = metadata['description'][:max_desc_len]
+                if len(metadata['description']) > max_desc_len:
                     desc += "..."
                 display_text += f" - {desc}"
+            display_text += source_suffix
             self.listbox.insert(tk.END, display_text)
 
         # Update count label
@@ -216,9 +223,12 @@ class CommandListPanel(ttk.Frame):
             index = selection[0]
             metadata = self.filtered_metadata[index]
 
-            # Load the full command from controller
+            # Load the full command from controller (with source for multi-directory support)
             try:
-                self.selected_command = self.command_controller.load_command(metadata['name'])
+                self.selected_command = self.command_controller.load_command(
+                    metadata['name'],
+                    source=metadata.get('source')
+                )
                 self.delete_button.config(state=tk.NORMAL)
                 self.duplicate_button.config(state=tk.NORMAL)
                 self.rename_button.config(state=tk.NORMAL)
