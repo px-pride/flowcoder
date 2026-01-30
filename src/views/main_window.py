@@ -56,8 +56,12 @@ class MainWindow:
         # Initialize UI controller (first, as other components may use it)
         self.ui_controller = UIController(self.root)
 
-        # Initialize storage service
-        self.storage_service = StorageService()
+        # Working directory for operations (set early, used by storage service)
+        import os
+        self.working_directory = os.getcwd()
+
+        # Initialize storage service with project directory for three-tier command loading
+        self.storage_service = StorageService(project_dir=self.working_directory)
 
         # Initialize session manager (shared by Agents and Files tabs)
         from src.services.session_manager import SessionManager
@@ -74,10 +78,6 @@ class MainWindow:
 
         # Initialize audio service
         self.audio_service = AudioService()
-
-        # Working directory for Claude operations
-        import os
-        self.working_directory = os.getcwd()
 
         # Initialize Claude service and execution controller
         # Use real Claude Agent SDK by default, MockClaudeService for testing
@@ -110,6 +110,10 @@ class MainWindow:
 
         # Track async tasks for cleanup
         self._async_tasks: List[asyncio.Task] = []
+
+        # Last contact tracking
+        self._last_contact_time = None
+        self._status_update_job = None
 
         # Create and configure asyncio event loop for Tkinter integration
         self.loop = asyncio.new_event_loop()
@@ -263,7 +267,47 @@ class MainWindow:
         self.status_bar.set_working_dir(self.working_directory)
         self.status_bar.set_connection_status("Not connected")
 
+        # Add last activity label to status bar
+        self.last_contact_label = ttk.Label(
+            self.status_bar,
+            text="Last activity: --",
+            font=('TkDefaultFont', 9),
+            foreground='#9E9E9E'
+        )
+        self.last_contact_label.pack(side=tk.RIGHT, padx=10)
+
         logger.debug("Enhanced status bar created")
+
+    def _update_last_contact_time(self):
+        """Record the current time as last contact from Claude."""
+        import time
+        self._last_contact_time = time.time()
+
+        # Start the status update loop if not already running
+        if not self._status_update_job:
+            self._update_status_display()
+
+    def _update_status_display(self):
+        """Update the 'Last activity' display every second."""
+        if not self._last_contact_time:
+            self.last_contact_label.config(text="Last activity: --")
+        else:
+            import time
+            elapsed = time.time() - self._last_contact_time
+
+            if elapsed < 1:
+                time_str = "just now"
+            elif elapsed < 60:
+                time_str = f"{int(elapsed)}s ago"
+            elif elapsed < 3600:
+                time_str = f"{int(elapsed / 60)}m ago"
+            else:
+                time_str = f"{int(elapsed / 3600)}h ago"
+
+            self.last_contact_label.config(text=f"Last activity: {time_str}")
+
+        # Schedule next update in 1 second
+        self._status_update_job = self.root.after(1000, self._update_status_display)
 
     def _apply_styling(self):
         """Apply basic styling and theme."""
@@ -732,6 +776,27 @@ A GUI drag-and-drop meta-agent builder for Claude Code.
 Created with Claude Agent SDK
         """
         messagebox.showinfo("About FlowCoder", about_text)
+
+    def on_session_working_dir_changed(self, working_directory: str):
+        """
+        Handle session working directory change.
+
+        Called when user selects a different session. Updates the storage service
+        to show commands from the new session's project directory.
+
+        Args:
+            working_directory: The selected session's working directory
+        """
+        logger.info(f"Session working directory changed to: {working_directory}")
+
+        # Update storage service to use new project directory
+        self.storage_service.set_project_dir(working_directory)
+
+        # Refresh command list to show commands from new project directory
+        if hasattr(self, 'commands_tab') and self.commands_tab:
+            if hasattr(self.commands_tab, 'command_list_panel'):
+                self.commands_tab.command_list_panel.refresh()
+                logger.debug("Command list refreshed for new project directory")
 
     def on_closing(self):
         """Handle window close event."""
@@ -1361,6 +1426,9 @@ Created with Claude Agent SDK
             prompt_text: The prompt being executed
             chunk: Streaming chunk (empty string = start of prompt)
         """
+        # Update last contact timestamp
+        self._update_last_contact_time()
+
         if chunk == "":
             # Start of prompt - show what we're asking Claude
             self.chat_panel.add_message(f"Prompt: {prompt_text}", tag='user')

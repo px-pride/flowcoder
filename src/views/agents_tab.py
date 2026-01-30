@@ -266,6 +266,9 @@ class AgentsTab(ttk.Frame):
             session_manager=self.session_manager
         )
 
+        # Pass main_window reference for last contact tracking
+        widget.main_window = self.main_window
+
         # Store in map (but don't pack yet)
         self.session_widgets[session.name] = widget
 
@@ -294,6 +297,11 @@ class AgentsTab(ttk.Frame):
 
         # Update control buttons state
         self._update_control_buttons()
+
+        # Update storage service project directory to match session's working directory
+        session = self.session_manager.get_session(session_name)
+        if session and hasattr(self.main_window, 'on_session_working_dir_changed'):
+            self.main_window.on_session_working_dir_changed(session.working_directory)
 
     def on_new_session(self):
         """Handle New Session button - show dialog to create new session."""

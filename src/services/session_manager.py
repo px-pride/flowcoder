@@ -325,8 +325,8 @@ class SessionManager:
                 from ..controllers.execution_controller import ExecutionController
                 from ..services import StorageService
 
-                # Get storage service instance (shared across sessions)
-                storage_service = StorageService()
+                # Get storage service instance with session's working directory
+                storage_service = StorageService(project_dir=working_directory)
 
                 session.execution_controller = ExecutionController(
                     agent_service=session.agent_service,
@@ -668,7 +668,7 @@ class SessionManager:
                             from ..controllers.execution_controller import ExecutionController
                             from ..services import StorageService
 
-                            storage_service = StorageService()
+                            storage_service = StorageService(project_dir=session.working_directory)
 
                             session.execution_controller = ExecutionController(
                                 agent_service=session.agent_service,

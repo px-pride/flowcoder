@@ -7,7 +7,7 @@ Handles persistence of commands to JSON files.
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 from ..models import Command
 
@@ -38,42 +38,131 @@ class CorruptedCommandError(StorageError):
 class StorageService:
     """Service for saving and loading commands to/from disk."""
 
-    def __init__(self, commands_dir: str = "./commands"):
+    def __init__(self, project_dir: Optional[str] = None):
         """
-        Initialize the storage service.
+        Initialize the storage service with three-tier command directories.
 
         Args:
-            commands_dir: Directory where command files are stored
+            project_dir: Project working directory. If provided, commands will be
+                         loaded from {project_dir}/.flowcoder/commands/
+
+        Command directories (in priority order):
+            1. Project: {project_dir}/.flowcoder/commands/
+            2. User: ~/.flowcoder/commands/
+            3. Flowcoder: {repo}/commands/
         """
-        self.commands_dir = Path(commands_dir)
-        self._ensure_commands_directory()
+        # Compute flowcoder repo commands directory from this file's location
+        # storage_service.py is at src/services/storage_service.py
+        # So parent.parent.parent gives us the repo root
+        self.flowcoder_commands_dir = Path(__file__).parent.parent.parent / "commands"
 
-    def _ensure_commands_directory(self) -> None:
-        """Ensure the commands directory exists."""
-        try:
-            self.commands_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Commands directory ready: {self.commands_dir}")
-        except Exception as e:
-            logger.error(f"Failed to create commands directory: {e}")
-            raise StorageError(f"Could not create commands directory: {e}")
+        # User commands directory
+        self.user_commands_dir = Path.home() / ".flowcoder" / "commands"
 
-    def _get_command_file_path(self, command_name: str) -> Path:
+        # Project commands directory (optional)
+        self.project_commands_dir = (
+            Path(project_dir) / ".flowcoder" / "commands"
+            if project_dir else None
+        )
+
+        # Build search order list (project first if available)
+        self._command_dirs: List[Tuple[Path, str]] = []
+        if self.project_commands_dir:
+            self._command_dirs.append((self.project_commands_dir, "proj"))
+        self._command_dirs.append((self.user_commands_dir, "user"))
+        self._command_dirs.append((self.flowcoder_commands_dir, "fc"))
+
+        # For backward compatibility, keep commands_dir pointing to project or user
+        self.commands_dir = self.project_commands_dir or self.user_commands_dir
+
+        logger.info(f"StorageService initialized with {len(self._command_dirs)} command directories")
+        for cmd_dir, source in self._command_dirs:
+            exists = cmd_dir.exists()
+            logger.debug(f"  {source}: {cmd_dir} (exists={exists})")
+
+    def set_project_dir(self, project_dir: Optional[str]) -> None:
+        """
+        Update the project directory for command loading.
+
+        Call this when the active session changes to update which project
+        commands are visible.
+
+        Args:
+            project_dir: New project working directory, or None to disable project tier
+        """
+        # Update project commands directory
+        self.project_commands_dir = (
+            Path(project_dir) / ".flowcoder" / "commands"
+            if project_dir else None
+        )
+
+        # Rebuild search order list
+        self._command_dirs = []
+        if self.project_commands_dir:
+            self._command_dirs.append((self.project_commands_dir, "proj"))
+        self._command_dirs.append((self.user_commands_dir, "user"))
+        self._command_dirs.append((self.flowcoder_commands_dir, "fc"))
+
+        # Update primary directory for saving new commands
+        self.commands_dir = self.project_commands_dir or self.user_commands_dir
+
+        logger.info(f"StorageService project_dir updated to: {project_dir}")
+        for cmd_dir, source in self._command_dirs:
+            exists = cmd_dir.exists()
+            logger.debug(f"  {source}: {cmd_dir} (exists={exists})")
+
+    def _get_command_file_path(self, command_name: str, source: Optional[str] = None) -> Path:
         """
         Get the file path for a command.
 
         Args:
             command_name: Name of the command
+            source: Optional source tier ('proj', 'user', 'fc'). If not provided,
+                    searches all directories and returns first match.
 
         Returns:
             Path to the command file
+
+        Raises:
+            CommandNotFoundError: If source specified but not found
         """
-        # Sanitize command name for filename
         safe_name = command_name.replace(" ", "_")
-        return self.commands_dir / f"{safe_name}.json"
+        filename = f"{safe_name}.json"
+
+        if source:
+            # Get specific directory for source
+            for cmd_dir, src in self._command_dirs:
+                if src == source:
+                    return cmd_dir / filename
+            raise CommandNotFoundError(f"Unknown source: {source}")
+
+        # Search all directories, return first existing match
+        for cmd_dir, src in self._command_dirs:
+            path = cmd_dir / filename
+            if path.exists():
+                return path
+
+        # Not found anywhere, return path in primary directory (for new commands)
+        return self.commands_dir / filename
+
+    def _get_source_for_path(self, file_path: Path) -> str:
+        """Determine the source tier for a given file path."""
+        file_path = file_path.resolve()
+        for cmd_dir, source in self._command_dirs:
+            if cmd_dir.exists():
+                try:
+                    file_path.relative_to(cmd_dir.resolve())
+                    return source
+                except ValueError:
+                    continue
+        return "fc"  # Default fallback
 
     def save_command(self, command: Command, overwrite: bool = True) -> None:
         """
         Save a command to disk.
+
+        For existing commands: saves to original location.
+        For new commands: saves to project directory (or user if no project).
 
         Args:
             command: Command to save
@@ -83,7 +172,13 @@ class StorageService:
             CommandAlreadyExistsError: If command exists and overwrite=False
             StorageError: If save operation fails
         """
-        file_path = self._get_command_file_path(command.name)
+        # Determine target directory
+        if hasattr(command, '_file_path') and command._file_path:
+            # Existing command - save to original location
+            file_path = command._file_path
+        else:
+            # New command - save to primary directory (project or user)
+            file_path = self.commands_dir / f"{command.name.replace(' ', '_')}.json"
 
         # Check if already exists
         if file_path.exists() and not overwrite:
@@ -91,16 +186,20 @@ class StorageService:
                 f"Command '{command.name}' already exists"
             )
 
+        # Ensure directory exists (JIT creation)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
         # Update modified timestamp
         command.update_modified()
 
         try:
-            # Convert to dict
             data = command.to_dict()
-
-            # Write to file with pretty formatting
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+
+            # Update command's file path reference
+            command._file_path = file_path
+            command._source = self._get_source_for_path(file_path)
 
             logger.info(f"Saved command '{command.name}' to {file_path}")
 
@@ -108,12 +207,13 @@ class StorageService:
             logger.error(f"Failed to save command '{command.name}': {e}")
             raise StorageError(f"Could not save command: {e}")
 
-    def load_command(self, command_name: str) -> Command:
+    def load_command(self, command_name: str, source: Optional[str] = None) -> Command:
         """
         Load a command from disk.
 
         Args:
             command_name: Name of the command to load
+            source: Optional source tier ('proj', 'user', 'fc')
 
         Returns:
             Loaded Command object
@@ -123,7 +223,7 @@ class StorageService:
             CorruptedCommandError: If command file is invalid
             StorageError: If load operation fails
         """
-        file_path = self._get_command_file_path(command_name)
+        file_path = self._get_command_file_path(command_name, source)
 
         if not file_path.exists():
             raise CommandNotFoundError(
@@ -135,6 +235,11 @@ class StorageService:
                 data = json.load(f)
 
             command = Command.from_dict(data)
+
+            # Store source info on command for save operations
+            command._source = self._get_source_for_path(file_path)
+            command._file_path = file_path
+
             logger.info(f"Loaded command '{command_name}' from {file_path}")
             return command
 
@@ -167,34 +272,51 @@ class StorageService:
                 return self.load_command(metadata['name'])
         return None
 
-    def delete_command(self, command_name: str) -> None:
+    def delete_command(self, command_name: str, source: Optional[str] = None) -> None:
         """
         Delete a command from disk.
 
+        If source not specified, deletes from highest-priority location.
+
         Args:
             command_name: Name of the command to delete
+            source: Optional source tier to delete from
 
         Raises:
             CommandNotFoundError: If command doesn't exist
             StorageError: If delete operation fails
         """
-        file_path = self._get_command_file_path(command_name)
+        safe_name = command_name.replace(" ", "_")
+        filename = f"{safe_name}.json"
 
-        if not file_path.exists():
-            raise CommandNotFoundError(
-                f"Command '{command_name}' not found"
-            )
+        # Find the file to delete
+        file_path = None
+        if source:
+            for cmd_dir, src in self._command_dirs:
+                if src == source:
+                    file_path = cmd_dir / filename
+                    break
+        else:
+            # Find highest-priority location where command exists
+            for cmd_dir, src in self._command_dirs:
+                path = cmd_dir / filename
+                if path.exists():
+                    file_path = path
+                    break
+
+        if not file_path or not file_path.exists():
+            raise CommandNotFoundError(f"Command '{command_name}' not found")
 
         try:
             file_path.unlink()
-            logger.info(f"Deleted command '{command_name}'")
+            logger.info(f"Deleted command '{command_name}' from {file_path}")
         except Exception as e:
             logger.error(f"Failed to delete command '{command_name}': {e}")
             raise StorageError(f"Could not delete command: {e}")
 
     def list_commands(self) -> List[Dict[str, Any]]:
         """
-        List all available commands with their metadata.
+        List all available commands with their metadata from all directories.
 
         Returns:
             List of command metadata dictionaries with keys:
@@ -205,64 +327,77 @@ class StorageService:
             - modified: Last modified timestamp
             - block_count: Number of blocks in flowchart
             - file_path: Path to command file
+            - source: Source tier ('proj', 'user', 'fc')
 
         Raises:
             StorageError: If listing fails
         """
         commands = []
 
-        try:
-            # Find all .json files in commands directory
-            for file_path in self.commands_dir.glob("*.json"):
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
+        for cmd_dir, source in self._command_dirs:
+            if not cmd_dir.exists():
+                continue
 
-                    # Extract metadata
-                    metadata = {
-                        'id': data.get('id', ''),
-                        'name': data.get('name', ''),
-                        'description': data.get('description', ''),
-                        'created': data.get('metadata', {}).get('created', ''),
-                        'modified': data.get('metadata', {}).get('modified', ''),
-                        'block_count': len(data.get('flowchart', {}).get('blocks', {})),
-                        'file_path': str(file_path)
-                    }
+            try:
+                for file_path in cmd_dir.glob("*.json"):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
 
-                    commands.append(metadata)
+                        metadata = {
+                            'id': data.get('id', ''),
+                            'name': data.get('name', ''),
+                            'description': data.get('description', ''),
+                            'created': data.get('metadata', {}).get('created', ''),
+                            'modified': data.get('metadata', {}).get('modified', ''),
+                            'block_count': len(data.get('flowchart', {}).get('blocks', {})),
+                            'file_path': str(file_path),
+                            'source': source,
+                        }
+                        commands.append(metadata)
 
-                except json.JSONDecodeError:
-                    logger.warning(f"Skipping corrupted file: {file_path}")
-                    continue
-                except Exception as e:
-                    logger.warning(f"Error reading {file_path}: {e}")
-                    continue
+                    except json.JSONDecodeError:
+                        logger.warning(f"Skipping corrupted file: {file_path}")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Error reading {file_path}: {e}")
+                        continue
 
-            # Sort by modified date (most recent first)
-            commands.sort(
-                key=lambda x: x['modified'],
-                reverse=True
-            )
+            except Exception as e:
+                logger.warning(f"Error listing commands from {cmd_dir}: {e}")
+                continue
 
-            logger.info(f"Found {len(commands)} commands")
-            return commands
+        # Sort by modified date (most recent first)
+        commands.sort(key=lambda x: x['modified'], reverse=True)
 
-        except Exception as e:
-            logger.error(f"Failed to list commands: {e}")
-            raise StorageError(f"Could not list commands: {e}")
+        logger.info(f"Found {len(commands)} commands across {len(self._command_dirs)} directories")
+        return commands
 
-    def command_exists(self, command_name: str) -> bool:
+    def command_exists(self, command_name: str, source: Optional[str] = None) -> bool:
         """
         Check if a command exists.
 
         Args:
             command_name: Name of the command
+            source: Optional source tier to check
 
         Returns:
             True if command exists, False otherwise
         """
-        file_path = self._get_command_file_path(command_name)
-        return file_path.exists()
+        safe_name = command_name.replace(" ", "_")
+        filename = f"{safe_name}.json"
+
+        if source:
+            for cmd_dir, src in self._command_dirs:
+                if src == source:
+                    return (cmd_dir / filename).exists()
+            return False
+
+        # Check all directories
+        for cmd_dir, src in self._command_dirs:
+            if (cmd_dir / filename).exists():
+                return True
+        return False
 
     def get_command_count(self) -> int:
         """
