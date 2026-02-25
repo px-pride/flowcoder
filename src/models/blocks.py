@@ -440,8 +440,12 @@ class CommandBlock(Block):
 
     This allows commands to call other commands, enabling
     composition and reusability.
+
+    The command_name field supports variable substitution ({{varname}}, $N),
+    enabling dynamic dispatch — the command to invoke can be determined
+    at runtime from execution context variables.
     """
-    command_name: str = ""  # Name of command to execute
+    command_name: str = ""  # Name of command to execute (supports {{varname}} and $N)
     arguments: str = ""  # Arguments to pass (may contain variables)
     inherit_variables: bool = False  # Pass parent variables to child
     merge_output: bool = False  # Merge child output into parent scope
