@@ -17,11 +17,17 @@ from .base_service import BaseService
 
 try:
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+    from claude_agent_sdk._internal.message_parser import parse_message
+    from claude_agent_sdk._errors import MessageParseError
+    from claude_agent_sdk._messages import ResultMessage
     CLAUDE_SDK_AVAILABLE = True
 except ImportError:
     CLAUDE_SDK_AVAILABLE = False
     ClaudeSDKClient = None
     ClaudeAgentOptions = None
+    parse_message = None
+    MessageParseError = None
+    ResultMessage = None
 
 
 logger = logging.getLogger(__name__)
@@ -318,6 +324,33 @@ class ClaudeAgentService(BaseService):
         except Exception as e:
             logger.error(f"Error force-killing process {pid}: {e}")
 
+    async def _receive_response_safe(self):
+        """Iterate over SDK response messages, skipping unknown message types.
+
+        The SDK's ``receive_response()`` calls ``parse_message()`` internally
+        and raises ``MessageParseError`` on unrecognised message types (e.g.
+        ``rate_limit_event``).  This helper catches those errors so a single
+        unknown event doesn't kill the entire response stream.
+
+        Falls back to ``self._client.receive_response()`` when the raw query
+        stream is not accessible.
+        """
+        query = getattr(self._client, '_query', None)
+        if query is None:
+            async for message in self._client.receive_response():
+                yield message
+            return
+
+        async for data in query.receive_messages():
+            try:
+                message = parse_message(data)
+            except MessageParseError:
+                logger.warning("Skipping unknown SDK message type: %s", data.get("type"))
+                continue
+            yield message
+            if isinstance(message, ResultMessage):
+                return
+
     async def stream_prompt(self, prompt: str):
         """
         Execute a prompt with Claude and yield raw SDK message objects.
@@ -341,7 +374,7 @@ class ClaudeAgentService(BaseService):
             await self._client.query(prompt)
 
             # Yield raw response objects as they arrive
-            async for chunk in self._client.receive_response():
+            async for chunk in self._receive_response_safe():
                 yield chunk
 
         except Exception as e:
@@ -399,7 +432,7 @@ class ClaudeAgentService(BaseService):
 
                 # Collect response
                 response_text = ""
-                async for message in self._client.receive_response():
+                async for message in self._receive_response_safe():
                     response_text += str(message)
 
                 # Calculate duration
