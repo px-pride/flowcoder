@@ -129,9 +129,11 @@ def parse_sdk_message(sdk_message) -> tuple[str, str, str]:
                     logger.debug(f"Parsed StreamEvent chunk: {len(extracted)} chars")
                     return (extracted, f"[StreamEvent] {extracted}", "text_delta")
 
-            # content_block_start — paragraph break signal
+            # content_block_start — paragraph break signal (text blocks only)
             if "content_block_start" in message_str:
-                return ("", "", "content_block_start")
+                if "'type': 'text'" in message_str:
+                    return ("", "", "content_block_start")
+                return ("", "", "system")
 
             # Other system-level events — suppress
             if any(evt in message_str for evt in _SYSTEM_EVENT_TYPES):

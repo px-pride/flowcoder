@@ -134,6 +134,7 @@ class CLIAgent:
 
         # Streaming state
         self._is_streaming = False
+        self._prompt_has_output = False
 
     async def run(self) -> None:
         """Main entry point. Initialize, run REPL, then shutdown."""
@@ -197,6 +198,7 @@ class CLIAgent:
         ec.on_block_complete = self._on_block_complete
         ec.on_execution_complete = self._on_execution_complete
         ec.on_prompt_stream = self._on_prompt_stream
+        ec.on_refresh_requested = self._on_refresh_requested
 
     # ── REPL ──────────────────────────────────────────────────────────
 
@@ -420,7 +422,8 @@ class CLIAgent:
             chunk: Raw SDK message (empty string = start of prompt)
         """
         if chunk == "":
-            # Start of a new prompt — show what's being asked
+            # Start of a new prompt — reset state and show what's being asked
+            self._prompt_has_output = False
             preview = prompt_text[:80] + "..." if len(prompt_text) > 80 else prompt_text
             out.print_system(f"    Prompt: {preview}")
             return
@@ -429,8 +432,41 @@ class CLIAgent:
         text_content, _, message_type = parse_sdk_message(chunk)
         if message_type == "text_delta" and text_content:
             out.stream_text(text_content)
+            self._prompt_has_output = True
         elif message_type == "assistant_plain" and text_content:
             out.stream_text(text_content)
+            self._prompt_has_output = True
+        elif message_type == "content_block_start":
+            if self._prompt_has_output:
+                out.stream_text("\n\n")
+
+    async def _on_refresh_requested(self) -> None:
+        """Handle a Refresh block by restarting the SDK session."""
+        out.print_system("    Refreshing agent session...")
+        try:
+            if self.session.agent_service:
+                await self.session.agent_service.end_session()
+
+            # Recreate the AI service with a fresh session
+            kwargs = {}
+            if self.model:
+                kwargs["model"] = self.model
+            self.session.agent_service = ServiceFactory.create_service(
+                service_type=self.service_type,
+                cwd=self.cwd,
+                system_prompt=self.system_prompt,
+                permission_mode="bypassPermissions",
+                **kwargs,
+            )
+
+            # Re-wire the execution controller to use the new service
+            self.session.execution_controller.agent_service = self.session.agent_service
+
+            await self.session.agent_service.ensure_session()
+            out.print_system("    Session refreshed.")
+        except Exception as e:
+            logger.error(f"Refresh failed: {e}", exc_info=True)
+            raise
 
     # ── Shutdown ──────────────────────────────────────────────────────
 
