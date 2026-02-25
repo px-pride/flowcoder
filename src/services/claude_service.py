@@ -19,7 +19,7 @@ try:
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
     from claude_agent_sdk._internal.message_parser import parse_message
     from claude_agent_sdk._errors import MessageParseError
-    from claude_agent_sdk._messages import ResultMessage
+    from claude_agent_sdk.types import ResultMessage
     CLAUDE_SDK_AVAILABLE = True
 except ImportError:
     CLAUDE_SDK_AVAILABLE = False
