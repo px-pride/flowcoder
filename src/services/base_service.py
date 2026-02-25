@@ -6,7 +6,7 @@ This ensures compatibility with ExecutionController and other components.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, AsyncIterator
+from typing import Optional, Dict, Any, AsyncIterator, Union
 
 
 class BaseService(ABC):
@@ -61,7 +61,7 @@ class BaseService(ABC):
         pass
 
     @abstractmethod
-    async def stream_prompt(self, prompt: str) -> AsyncIterator[str]:
+    async def stream_prompt(self, prompt: str) -> AsyncIterator[Any]:
         """
         Execute a prompt with streaming response.
 
@@ -69,7 +69,8 @@ class BaseService(ABC):
             prompt: The prompt text to send
 
         Yields:
-            str: Response chunks as they arrive
+            Response chunks as they arrive. Concrete implementations may
+            yield raw SDK objects or strings.
 
         Raises:
             Exception: If streaming fails

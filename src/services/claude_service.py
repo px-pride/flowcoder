@@ -110,8 +110,37 @@ class ClaudeAgentService(BaseService):
 
         self._client: Optional[Any] = None
         self._session_active = False
+        self._external_client = False
 
         logger.info(f"ClaudeAgentService initialized (cwd={cwd}, mode={permission_mode}, model={model})")
+
+    @classmethod
+    def from_client(cls, client, cwd: str = ".") -> "ClaudeAgentService":
+        """Wrap an externally-managed ClaudeSDKClient.
+
+        The caller owns the client lifecycle — start_session() and
+        end_session() become no-ops, and the service is immediately active.
+
+        Args:
+            client: A running ClaudeSDKClient instance (already entered).
+            cwd: Working directory for the service.
+
+        Returns:
+            A ClaudeAgentService wrapping the external client.
+        """
+        instance = cls.__new__(cls)
+        instance.cwd = cwd
+        instance.system_prompt = None
+        instance.permission_mode = "default"
+        instance.max_retries = 3
+        instance.timeout_seconds = 300
+        instance.stderr_callback = None
+        instance.model = None
+        instance._client = client
+        instance._session_active = True
+        instance._external_client = True
+        logger.info(f"ClaudeAgentService wrapping external client (cwd={cwd})")
+        return instance
 
     async def start_session(self) -> None:
         """
@@ -123,6 +152,9 @@ class ClaudeAgentService(BaseService):
         if self._session_active:
             logger.debug("Session already active, skipping start_session()")
             return  # Allow multiple calls - session already running
+
+        if self._external_client:
+            return  # External client — caller manages the lifecycle
 
         try:
             # Build options dict, only including system_prompt if provided
@@ -180,8 +212,11 @@ class ClaudeAgentService(BaseService):
         This clears all conversation history and starts fresh.
 
         Raises:
-            ClaudeServiceError: If reset fails
+            ClaudeServiceError: If reset fails or session is externally managed
         """
+        if self._external_client:
+            raise ClaudeServiceError("Cannot reset an externally-managed session")
+
         logger.info("Resetting Claude session...")
         await self.end_session()
         await self.start_session()
@@ -191,10 +226,17 @@ class ClaudeAgentService(BaseService):
         """
         End the Claude session.
 
-        Attempts graceful shutdown first, then force-kills if necessary.
+        For internally-managed clients: attempts graceful shutdown, then force-kills.
+        For externally-managed clients: detaches without killing the process.
         """
         if not self._session_active:
             logger.warning("No active session to end")
+            return
+
+        if self._external_client:
+            logger.info("Detaching from external client (not killing)")
+            self._client = None
+            self._session_active = False
             return
 
         # Get the process PID before attempting shutdown (for force-kill fallback)
@@ -278,13 +320,14 @@ class ClaudeAgentService(BaseService):
 
     async def stream_prompt(self, prompt: str):
         """
-        Execute a prompt with Claude and yield response chunks in real-time.
+        Execute a prompt with Claude and yield raw SDK message objects.
 
         Args:
             prompt: The prompt text to send to Claude
 
         Yields:
-            str: Response chunks as they arrive from Claude
+            Raw SDK message objects (StreamEvent, AssistantMessage,
+            ResultMessage, etc.) as they arrive from the SDK.
 
         Raises:
             ClaudeServiceError: If no active session
@@ -297,13 +340,26 @@ class ClaudeAgentService(BaseService):
             # Send prompt to Claude
             await self._client.query(prompt)
 
-            # Yield response chunks as they arrive
+            # Yield raw response objects as they arrive
             async for chunk in self._client.receive_response():
-                yield str(chunk)
+                yield chunk
 
         except Exception as e:
             logger.error(f"Streaming error: {e}", exc_info=True)
             raise ClaudeAPIError(f"Failed to stream prompt: {e}")
+
+    async def stream_prompt_text(self, prompt: str):
+        """
+        Execute a prompt and yield string-ified SDK messages (backward compat).
+
+        Args:
+            prompt: The prompt text to send to Claude
+
+        Yields:
+            str: String representations of SDK message objects.
+        """
+        async for chunk in self.stream_prompt(prompt):
+            yield str(chunk)
 
     async def execute_prompt(
         self,
