@@ -34,10 +34,12 @@ from .service_factory import (
     ServiceFactoryError
 )
 
-from .audio_service import (
-    AudioService,
-    AudioServiceError
-)
+# AudioService requires pygame — lazy-load so that headless / embedding
+# consumers are not forced to install GUI dependencies.
+_AUDIO_LAZY = {
+    'AudioService': '.audio_service',
+    'AudioServiceError': '.audio_service',
+}
 
 from .session_manager import (
     SessionManager,
@@ -64,6 +66,14 @@ from .command_block_executor import (
     MaxRecursionDepthError
 )
 
+
+def __getattr__(name: str):
+    if name in _AUDIO_LAZY:
+        from . import audio_service as _mod
+        return getattr(_mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     # Storage
     'StorageService',
@@ -87,7 +97,7 @@ __all__ = [
     # Service Factory
     'ServiceFactory',
     'ServiceFactoryError',
-    # Audio
+    # Audio (lazy-loaded)
     'AudioService',
     'AudioServiceError',
     # Session Management

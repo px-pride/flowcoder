@@ -15,10 +15,20 @@ from .command_controller import (
     InvalidCommandNameError
 )
 
-from .ui_controller import (
-    UIController,
-    ui_thread
-)
+# UIController requires tkinter — lazy-load so headless / embedding
+# consumers don't need GUI libraries.
+_UI_LAZY = {
+    'UIController': '.ui_controller',
+    'ui_thread': '.ui_controller',
+}
+
+
+def __getattr__(name: str):
+    if name in _UI_LAZY:
+        from . import ui_controller as _mod
+        return getattr(_mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     'ExecutionController',
@@ -26,6 +36,7 @@ __all__ = [
     'CommandController',
     'CommandControllerError',
     'InvalidCommandNameError',
+    # UI (lazy-loaded)
     'UIController',
     'ui_thread',
 ]
