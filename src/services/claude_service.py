@@ -137,7 +137,8 @@ class ClaudeAgentService(BaseService):
                     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000"
                 },
                 "include_partial_messages": True,  # Show intermediate reasoning as it happens
-                "stderr": self.stderr_callback  # Capture tool calls, thinking, file operations
+                "stderr": self.stderr_callback,  # Capture tool calls, thinking, file operations
+                "setting_sources": ["user", "project", "local"]
             }
 
             # Only add system_prompt if it's a non-empty string
