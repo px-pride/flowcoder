@@ -9,6 +9,8 @@ from .blocks import (
     BlockType,
     Position,
     BranchCondition,
+    VariableEntry,
+    WaitEntry,
     StartBlock,
     PromptBlock,
     VariableBlock,
@@ -17,6 +19,9 @@ from .blocks import (
     CommandBlock,
     RefreshBlock,
     EndBlock,
+    ExitBlock,
+    SpawnBlock,
+    WaitBlock,
     create_block
 )
 
@@ -44,6 +49,8 @@ __all__ = [
     'BlockType',
     'Position',
     'BranchCondition',
+    'VariableEntry',
+    'WaitEntry',
     'StartBlock',
     'PromptBlock',
     'VariableBlock',
@@ -52,6 +59,9 @@ __all__ = [
     'CommandBlock',
     'RefreshBlock',
     'EndBlock',
+    'ExitBlock',
+    'SpawnBlock',
+    'WaitBlock',
     'create_block',
     # Connection
     'Connection',

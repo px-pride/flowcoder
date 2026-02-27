@@ -66,6 +66,17 @@ from .command_block_executor import (
     MaxRecursionDepthError
 )
 
+from .config_service import (
+    ConfigService,
+    ClaudeConfig,
+    CodexConfig,
+    ConfigError,
+    ConfigNotFoundError as ConfigNotFoundError_,
+    ConfigAlreadyExistsError,
+    CorruptedConfigError
+)
+
+
 
 def __getattr__(name: str):
     if name in _AUDIO_LAZY:
@@ -117,4 +128,12 @@ __all__ = [
     'CommandBlockExecutorError',
     'CBECommandNotFoundError',
     'MaxRecursionDepthError',
+    # Config
+    'ConfigService',
+    'ClaudeConfig',
+    'CodexConfig',
+    'ConfigError',
+    'ConfigNotFoundError_',
+    'ConfigAlreadyExistsError',
+    'CorruptedConfigError',
 ]

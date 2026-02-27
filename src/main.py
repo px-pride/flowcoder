@@ -38,6 +38,10 @@ def main():
                                   help='Use a blank system prompt instead of the built-in FlowCoder prompt')
     cli_parser.add_argument('--session-name', default='cli-session', help='Session name')
     cli_parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    cli_parser.add_argument('-n', '--name', default=None, help='Name the session')
+    cli_parser.add_argument('-c', '--config', default=None, help='Load base agent config file')
+    cli_parser.add_argument('-f', '--flowchart', nargs=argparse.REMAINDER,
+                           help='Non-interactive: execute flowchart command and exit')
 
     args = parser.parse_args()
 
@@ -54,13 +58,23 @@ def main():
         if args.no_system_prompt:
             system_prompt = ""
 
+        # -n/--name overrides --session-name
+        session_name = getattr(args, 'name', None) or args.session_name
+
+        # -f/--flowchart: non-interactive mode
+        flowchart_cmd = None
+        if getattr(args, 'flowchart', None):
+            flowchart_cmd = args.flowchart  # List of [command, arg1, arg2, ...]
+
         agent = CLIAgent(
             cwd=args.cwd,
             service_type=args.service,
             model=args.model,
             system_prompt=system_prompt,
-            session_name=args.session_name,
+            session_name=session_name,
             debug=args.debug,
+            config_name=getattr(args, 'config', None),
+            flowchart_cmd=flowchart_cmd,
         )
         asyncio.run(agent.run())
     else:

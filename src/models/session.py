@@ -122,6 +122,15 @@ class Session:
     git_repo_url: str = ""
     git_branch: str = ""
     git_auto_push: bool = False
+    config_name: str = ""  # Name of the .claudeconfig or .codexconfig in use
+
+    # Sound notification settings (None = disabled)
+    sound_on_prompt_complete: Optional[str] = None  # Sound when prompt finishes
+    sound_on_block_complete: Optional[str] = None   # Sound when block finishes
+    sound_on_command_pop: Optional[str] = None       # Sound when command pops from stack
+
+    # Command stack for nested slash command execution
+    command_stack: List[Any] = field(default_factory=list)  # Stack of active commands
 
     # Halted execution state (for resume functionality)
     halted_command: Optional[Any] = None  # Command that was halted
@@ -159,6 +168,10 @@ class Session:
             "git_repo_url": self.git_repo_url,
             "git_branch": self.git_branch,
             "git_auto_push": self.git_auto_push,
+            "config_name": self.config_name,
+            "sound_on_prompt_complete": self.sound_on_prompt_complete,
+            "sound_on_block_complete": self.sound_on_block_complete,
+            "sound_on_command_pop": self.sound_on_command_pop,
         }
 
     @staticmethod
@@ -181,6 +194,10 @@ class Session:
             git_repo_url=data.get("git_repo_url", ""),
             git_branch=data.get("git_branch", ""),
             git_auto_push=data.get("git_auto_push", False),
+            config_name=data.get("config_name", ""),
+            sound_on_prompt_complete=data.get("sound_on_prompt_complete"),
+            sound_on_block_complete=data.get("sound_on_block_complete"),
+            sound_on_command_pop=data.get("sound_on_command_pop"),
         )
 
     def add_message(self, role: str, content: str) -> Message:
@@ -258,6 +275,39 @@ class Session:
         self.halted_context = None
         self.halted_flowchart = None
         self.current_flowchart = None
+
+    def resume_execution(self):
+        """Resume halted flowchart execution.
+
+        Only valid when session is in HALTED state with saved execution context.
+
+        Raises:
+            RuntimeError: If not in halted state or no saved context.
+        """
+        if self.state != SessionState.HALTED:
+            raise RuntimeError("Cannot resume: session is not halted")
+        if not self.halted_context:
+            raise RuntimeError("Cannot resume: no saved execution context")
+        self.state = SessionState.EXECUTING
+
+    def drop_command_stack(self):
+        """Drop all commands from the command stack.
+
+        Only valid when session is in HALTED state.
+
+        Raises:
+            RuntimeError: If not in halted state.
+        """
+        if self.state != SessionState.HALTED:
+            raise RuntimeError("Cannot drop: session is not halted")
+        self.command_stack.clear()
+        self.clear_halted_state()
+        self.state = SessionState.IDLE
+
+    @property
+    def is_agent_on(self) -> bool:
+        """Whether the base agent is currently powered on."""
+        return self.agent_service is not None and getattr(self.agent_service, '_session_active', False)
 
     def __repr__(self) -> str:
         """String representation of session."""

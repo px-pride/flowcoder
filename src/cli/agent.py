@@ -101,6 +101,9 @@ class CLIAgent:
     - Built-in commands: /help, /commands, /quit
     """
 
+    # Hash commands accepted while executing
+    INTERRUPT_COMMANDS = {"#halt", "#stop", "#refresh", "#forcestop"}
+
     def __init__(
         self,
         cwd: Optional[str] = None,
@@ -109,6 +112,8 @@ class CLIAgent:
         system_prompt: Optional[str] = None,
         session_name: str = "cli-session",
         debug: bool = False,
+        config_name: Optional[str] = None,
+        flowchart_cmd: Optional[list] = None,
     ):
         """
         Initialize CLI agent.
@@ -120,6 +125,8 @@ class CLIAgent:
             system_prompt: System prompt for the AI
             session_name: Name for this session
             debug: Enable verbose/debug output
+            config_name: Name of config file to load (.claudeconfig/.codexconfig)
+            flowchart_cmd: Non-interactive mode: [command, arg1, arg2, ...]
         """
         self.cwd = os.path.abspath(cwd or os.getcwd())
         self.service_type = service_type
@@ -127,6 +134,8 @@ class CLIAgent:
         self.system_prompt = system_prompt if system_prompt is not None else DEFAULT_SYSTEM_PROMPT
         self.session_name = session_name
         self.debug = debug
+        self.config_name = config_name
+        self.flowchart_cmd = flowchart_cmd
 
         # Initialized in _initialize()
         self.session: Optional[Session] = None
@@ -136,19 +145,64 @@ class CLIAgent:
         self._is_streaming = False
         self._prompt_has_output = False
 
-    async def run(self) -> None:
-        """Main entry point. Initialize, run REPL, then shutdown."""
+    async def run(self) -> int:
+        """Main entry point. Initialize, run REPL (or -f command), then shutdown.
+
+        Returns:
+            Exit code (0 for success, non-zero for errors). Only meaningful in -f mode.
+        """
+        exit_code = 0
         try:
             await self._initialize()
-            out.print_banner()
-            out.print_system(f"Working directory: {self.cwd}")
-            out.print_system(f"Service: {ServiceFactory.get_service_display_name(self.service_type)}")
-            print()
-            await self._repl_loop()
+
+            if self.flowchart_cmd:
+                # Non-interactive -f mode: run one command and exit
+                exit_code = await self._run_flowchart_mode()
+            else:
+                # Interactive REPL mode
+                out.print_banner()
+                out.print_system(f"Working directory: {self.cwd}")
+                out.print_system(f"Service: {ServiceFactory.get_service_display_name(self.service_type)}")
+                out.print_system(f"Session: {self.session_name}")
+                print()
+                await self._repl_loop()
         except KeyboardInterrupt:
             print()
         finally:
             await self._shutdown()
+        return exit_code
+
+    async def _run_flowchart_mode(self) -> int:
+        """Non-interactive mode: execute a single flowchart command and exit.
+
+        Returns:
+            Exit code from the command (0 = success).
+        """
+        if not self.flowchart_cmd:
+            return 1
+
+        command_name = self.flowchart_cmd[0].lstrip("/")
+        args_string = " ".join(self.flowchart_cmd[1:])
+        command_str = f"/{command_name} {args_string}".strip()
+
+        # Power on the agent
+        try:
+            await self.session.agent_service.ensure_session()
+        except Exception as e:
+            out.print_error(f"Failed to start AI session: {e}")
+            return 1
+
+        # Execute the command
+        await self._handle_slash_command(command_str)
+
+        # Check the execution result
+        if self.session.execution_history:
+            last_run = self.session.execution_history[-1]
+            if last_run.status == "completed":
+                return 0
+            elif last_run.status == "error":
+                return 1
+        return 0
 
     async def _initialize(self) -> None:
         """Set up session, AI service, storage, and execution controller."""
@@ -212,7 +266,14 @@ class CLIAgent:
                 if not user_input:
                     continue
 
-                if user_input.startswith("/"):
+                # Hash commands (session functions)
+                if user_input.startswith("#"):
+                    await self._handle_hash_command(user_input)
+                elif user_input.startswith("!"):
+                    await self._handle_bang_command(user_input)
+                elif user_input.startswith("?"):
+                    await self._handle_query_command(user_input)
+                elif user_input.startswith("/"):
                     await self._handle_slash_command(user_input)
                 else:
                     await self._handle_message(user_input)
@@ -467,6 +528,149 @@ class CLIAgent:
         except Exception as e:
             logger.error(f"Refresh failed: {e}", exc_info=True)
             raise
+
+    # ── Hash commands (session functions) ────────────────────────────
+
+    async def _handle_hash_command(self, command_str: str) -> None:
+        """Handle #hash session function commands."""
+        cmd = command_str.strip().lower()
+
+        if cmd == "#halt":
+            if self.session.state == SessionState.EXECUTING:
+                self.session.execution_controller.halt()
+                out.print_system("Halt requested. Waiting for current block to finish...")
+            else:
+                out.print_system("Nothing to halt.")
+
+        elif cmd == "#resume":
+            if self.session.state == SessionState.HALTED:
+                try:
+                    self.session.resume_execution()
+                    out.print_system("Resuming execution...")
+                    # Re-execute from halted context if available
+                    if self.session.halted_context and self.session.halted_flowchart:
+                        context = await self.session.execution_controller.execute(
+                            command=self.session.halted_command,
+                            flowchart=self.session.halted_flowchart,
+                            context=self.session.halted_context,
+                        )
+                        success = context.status == ExecutionStatus.COMPLETED
+                        self.session.complete_execution(success=success)
+                        if success:
+                            out.print_success("Execution resumed and completed.")
+                        else:
+                            out.print_error(f"Execution finished: {context.status.value}")
+                except RuntimeError as e:
+                    out.print_error(str(e))
+            else:
+                out.print_system("Nothing to resume. Session is not halted.")
+
+        elif cmd == "#drop":
+            if self.session.state == SessionState.HALTED:
+                self.session.drop_command_stack()
+                out.print_system("Command stack dropped. Session is now idle.")
+            else:
+                out.print_system("Cannot drop: session is not halted.")
+
+        elif cmd == "#stop":
+            if self.session.state == SessionState.EXECUTING:
+                self.session.execution_controller.halt()
+                out.print_system("Stopping. Waiting for current block to finish...")
+            # After halt (or if already idle), turn off the agent
+            if self.session.agent_service and self.session.agent_service.is_active():
+                await self.session.agent_service.end_session()
+                out.print_system("Base agent turned off.")
+            else:
+                out.print_system("Agent is already off.")
+
+        elif cmd == "#refresh":
+            if self.session.state == SessionState.EXECUTING:
+                self.session.execution_controller.halt()
+                out.print_system("Halting before refresh...")
+            # Turn off and back on
+            if self.session.agent_service:
+                await self.session.agent_service.end_session()
+                out.print_system("Agent turned off.")
+            await self._on_refresh_requested()
+
+        elif cmd == "#forcestop":
+            out.print_error("Force stopping...")
+            if self.session.agent_service:
+                await self.session.agent_service.end_session()
+            self.session.command_stack.clear()
+            self.session.clear_halted_state()
+            self.session.state = SessionState.IDLE
+            out.print_system("Force stopped. Agent off, command stack cleared.")
+
+        else:
+            out.print_error(f"Unknown session command: {cmd}")
+            out.print_system("Available: #halt, #resume, #drop, #stop, #refresh, #forcestop")
+
+    # ── Bang commands (bash execution) ────────────────────────────
+
+    async def _handle_bang_command(self, command_str: str) -> None:
+        """Handle !bash commands — execute in the session's working directory."""
+        bash_cmd = command_str[1:].strip()
+        if not bash_cmd:
+            out.print_system("Usage: !<bash command>")
+            return
+
+        import subprocess
+        out.print_system(f"$ {bash_cmd}")
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                bash_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=self.cwd,
+            )
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                out.stream_text(line.decode(errors="replace"))
+            await proc.wait()
+            out.stream_end()
+            if proc.returncode != 0:
+                out.print_error(f"Exit code: {proc.returncode}")
+        except Exception as e:
+            out.print_error(f"Bash error: {e}")
+
+    # ── Query commands (?settings, ?config) ───────────────────────
+
+    async def _handle_query_command(self, command_str: str) -> None:
+        """Handle ?query commands."""
+        parts = command_str[1:].strip().split(None, 1)
+        if not parts:
+            return
+
+        cmd = parts[0].lower()
+        arg = parts[1] if len(parts) > 1 else ""
+
+        if cmd == "settings":
+            out.print_system("Session settings:")
+            out.print_system(f"  Working directory: {self.cwd}")
+            out.print_system(f"  Git repo URL: {self.session.git_repo_url or '(not set)'}")
+            out.print_system(f"  Git branch: {self.session.git_branch or '(default)'}")
+            out.print_system(f"  Auto-push: {self.session.git_auto_push}")
+            out.print_system(f"  Config: {self.session.config_name or '(default)'}")
+            out.print_system(f"  Sound on prompt: {self.session.sound_on_prompt_complete or 'None'}")
+            out.print_system(f"  Sound on block: {self.session.sound_on_block_complete or 'None'}")
+            out.print_system(f"  Sound on command pop: {self.session.sound_on_command_pop or 'None'}")
+
+        elif cmd == "config":
+            if not arg:
+                out.print_system("Usage: ?config <config_name>")
+                return
+            if self.session.is_agent_on:
+                out.print_error("Cannot change config while agent is running. Use #stop first.")
+                return
+            self.session.config_name = arg
+            out.print_success(f"Config set to: {arg}")
+
+        else:
+            out.print_error(f"Unknown query: ?{cmd}")
+            out.print_system("Available: ?settings, ?config <name>")
 
     # ── Shutdown ──────────────────────────────────────────────────────
 

@@ -1,8 +1,9 @@
 """
 Variable Substitution Utility for FlowCoder
 
-Handles substitution of positional arguments ($1, $2, $3) and
-structured output variables ({{varname}}) in prompt templates.
+Handles substitution of positional arguments ($1, $2, $3),
+structured output variables ({{varname}}), and conditional strings
+(<if BOOLVAR>content</if>) in prompt templates.
 """
 
 import re
@@ -11,13 +12,24 @@ from typing import Dict, List, Tuple, Any
 
 
 class VariableSubstitution:
-    """Handles variable substitution in prompt templates."""
+    """Handles variable substitution and conditional strings in prompt templates."""
 
     # Regex pattern for positional arguments ($1, $2, etc.)
     ARG_PATTERN = re.compile(r'\$(\d+)')
 
     # Regex pattern for structured output variables ({{varname}})
     VAR_PATTERN = re.compile(r'\{\{([a-zA-Z_][a-zA-Z0-9_.\[\]]*)\}\}')
+
+    # Regex pattern for conditional strings: <if VARNAME>content</if>
+    # Uses non-greedy matching for content so nested conditionals work via recursion
+    CONDITIONAL_PATTERN = re.compile(
+        r'(?<!\\)<if\s+([a-zA-Z_][a-zA-Z0-9_.\-]*)\s*>(.*?)(?<!\\)</if>',
+        re.DOTALL
+    )
+
+    # Pattern for escaped conditional tags: \<if> -> <if>, \</if> -> </if>
+    ESCAPED_OPEN_TAG = re.compile(r'\\(<if\b)')
+    ESCAPED_CLOSE_TAG = re.compile(r'\\(</if>)')
 
     @classmethod
     def substitute_arguments(
@@ -306,6 +318,109 @@ class VariableSubstitution:
         return cls.VAR_PATTERN.sub(replace_var, text)
 
     @classmethod
+    def process_conditionals(
+        cls,
+        text: str,
+        variables: Dict[str, Any]
+    ) -> str:
+        """
+        Process conditional strings: <if BOOLVAR>content</if>.
+
+        If BOOLVAR evaluates to true, the content is kept.
+        If BOOLVAR evaluates to false (or is missing), the content is removed.
+        Supports nested conditionals via recursive processing.
+
+        Escape with backslash: \\<if ...> produces literal <if ...>
+
+        Args:
+            text: Text containing conditional tags
+            variables: Dictionary of variables (booleans checked for truthiness)
+
+        Returns:
+            Text with conditional sections resolved
+
+        Examples:
+            >>> vars = {"NAME_KNOWN": True, "NAME": "Alice"}
+            >>> VariableSubstitution.process_conditionals(
+            ...     "Hello<if NAME_KNOWN> $NAME</if>!",
+            ...     vars
+            ... )
+            'Hello $NAME!'
+
+            >>> vars = {"NAME_KNOWN": False}
+            >>> VariableSubstitution.process_conditionals(
+            ...     "Hello<if NAME_KNOWN> $NAME</if>!",
+            ...     vars
+            ... )
+            'Hello!'
+        """
+        # Process from inner-most to outer-most by repeatedly applying
+        # the pattern until no more matches are found
+        max_depth = 20  # Safety limit for nesting
+        for _ in range(max_depth):
+            match = cls.CONDITIONAL_PATTERN.search(text)
+            if not match:
+                break
+
+            var_name = match.group(1)
+            content = match.group(2)
+
+            # Check if variable is truthy
+            var_value = variables.get(var_name, False)
+            is_truthy = bool(var_value)
+
+            if is_truthy:
+                # Keep the content (remove the tags)
+                text = text[:match.start()] + content + text[match.end():]
+            else:
+                # Remove the entire conditional block
+                text = text[:match.start()] + text[match.end():]
+
+        # Unescape escaped conditional tags
+        text = cls.ESCAPED_OPEN_TAG.sub(r'\1', text)
+        text = cls.ESCAPED_CLOSE_TAG.sub(r'\1', text)
+
+        return text
+
+    @classmethod
+    def validate_conditionals(cls, text: str) -> List[str]:
+        """
+        Validate conditional string syntax.
+
+        Checks for:
+        - Mismatched <if>...</if> tags
+        - Missing variable names in <if> tags
+
+        Args:
+            text: Text to validate
+
+        Returns:
+            List of error messages (empty if valid)
+        """
+        errors = []
+
+        # Count opening and closing tags (excluding escaped ones)
+        # Remove escaped tags first
+        clean_text = cls.ESCAPED_OPEN_TAG.sub('', text)
+        clean_text = cls.ESCAPED_CLOSE_TAG.sub('', clean_text)
+
+        open_tags = re.findall(r'<if\s+([a-zA-Z_][a-zA-Z0-9_.\-]*)?\s*>', clean_text)
+        close_tags = re.findall(r'</if>', clean_text)
+
+        # Check for <if> without variable name
+        bare_open = re.findall(r'<if\s*>', clean_text)
+        if bare_open:
+            errors.append("Found <if> tag without variable name")
+
+        if len(open_tags) != len(close_tags):
+            errors.append(
+                f"Mismatched conditional tags: {len(open_tags)} <if> vs "
+                f"{len(close_tags)} </if>"
+            )
+
+        return errors
+
+    @classmethod
     def substitute_all(
         cls,
         text: str,
@@ -313,9 +428,12 @@ class VariableSubstitution:
         variables: Dict[str, Any]
     ) -> str:
         """
-        Perform both argument and variable substitution.
+        Perform argument substitution, conditional processing, and variable substitution.
 
-        Order: $1, $2, etc. first, then {{varname}}
+        Order:
+        1. Process conditional strings (<if BOOLVAR>...</if>)
+        2. Substitute arguments ($1, $2, etc.)
+        3. Substitute variables ({{varname}})
 
         Args:
             text: Template text
@@ -333,6 +451,16 @@ class VariableSubstitution:
             ... )
             'Analyze utils.py with status ready'
         """
+        # Step 0: Process conditionals first (uses variables for boolean checks)
+        # Merge arguments and variables for conditional evaluation
+        merged = {}
+        if variables:
+            merged.update(variables)
+        if arguments:
+            merged.update(arguments)
+        if cls.CONDITIONAL_PATTERN.search(text):
+            text = cls.process_conditionals(text, merged)
+
         # Step 1: Substitute arguments ($1, $2, etc.)
         if arguments:
             text = cls.substitute_arguments(text, arguments)
