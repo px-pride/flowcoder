@@ -462,8 +462,16 @@ class VariableSubstitution:
             text = cls.process_conditionals(text, merged)
 
         # Step 1: Substitute arguments ($1, $2, etc.)
+        # Only pass actual $N keys to substitute_arguments. The arguments dict
+        # may also contain structured output variables (has_card, card_id, etc.)
+        # from previous blocks. If we pass those through, substitute_arguments
+        # will see the dict as non-empty and raise ValueError for any $N
+        # references that aren't present — breaking loop iterations where $1
+        # was never a declared command argument.
         if arguments:
-            text = cls.substitute_arguments(text, arguments)
+            arg_keys = {k: v for k, v in arguments.items() if cls.ARG_PATTERN.fullmatch(k)}
+            if arg_keys:
+                text = cls.substitute_arguments(text, arg_keys)
 
         # Step 2: Substitute variables ({{varname}})
         # Always call if there are {{varname}} patterns, even if variables is empty
