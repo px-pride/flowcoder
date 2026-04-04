@@ -1,0 +1,23 @@
+[project]
+name = "flowcoder-flowchart"
+version = "0.1.0"
+description = "Pure data library for defining flowchart workflows"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowcoder_flowchart"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

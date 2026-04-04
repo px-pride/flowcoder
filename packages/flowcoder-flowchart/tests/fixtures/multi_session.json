@@ -1,0 +1,30 @@
+{
+  "name": "deploy-workflow",
+  "description": "Deploy to staging and verify",
+  "arguments": [
+    {"name": "branch", "description": "Git branch", "required": true}
+  ],
+  "sessions": {
+    "deployer": {"model": "opus"},
+    "reviewer": {"model": "sonnet", "system_prompt": "You are a code reviewer. Be concise."}
+  },
+  "blocks": {
+    "b1": {"type": "start", "name": "Start"},
+    "b2": {"type": "prompt", "name": "Deploy", "session": "deployer",
+           "prompt": "Deploy branch $1 to staging"},
+    "b3": {"type": "prompt", "name": "Verify", "session": "reviewer",
+           "prompt": "Verify the staging deployment looks correct"},
+    "b4": {"type": "branch", "name": "OK?", "condition": "verified"},
+    "b5": {"type": "end", "name": "Done"},
+    "b6": {"type": "prompt", "name": "Fix", "session": "deployer",
+           "prompt": "Fix the issues: {{review_feedback}}"}
+  },
+  "connections": [
+    {"source_id": "b1", "target_id": "b2"},
+    {"source_id": "b2", "target_id": "b3"},
+    {"source_id": "b3", "target_id": "b4"},
+    {"source_id": "b4", "target_id": "b5", "is_true_path": true},
+    {"source_id": "b4", "target_id": "b6", "is_true_path": false},
+    {"source_id": "b6", "target_id": "b3"}
+  ]
+}

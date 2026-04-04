@@ -1,0 +1,10 @@
+{
+  "name": "no-start",
+  "blocks": {
+    "b1": {"type": "prompt", "name": "Ask", "prompt": "Hello"},
+    "b2": {"type": "end", "name": "End"}
+  },
+  "connections": [
+    {"source_id": "b1", "target_id": "b2"}
+  ]
+}

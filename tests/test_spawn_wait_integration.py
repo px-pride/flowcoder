@@ -513,3 +513,76 @@ class TestSpawnWaitClaude:
             assert result.variables.get("greeter_exit") == 0
         finally:
             await session.stop()
+
+    @pytest.mark.asyncio
+    @pytest.mark.slow
+    async def test_spawn_with_model_override(self, cmd_dir, has_claude):
+        """Spawn with model creates a dedicated session using that model."""
+        sub_cmd = Command(
+            name="model-agent",
+            flowchart=Flowchart(
+                blocks={
+                    "s": StartBlock(id="s", name="Start"),
+                    "p": PromptBlock(
+                        id="p", name="Say Hi",
+                        prompt=(
+                            "Respond with exactly one word: hi\n"
+                            "Do not include any other text, punctuation, or formatting."
+                        ),
+                        output_variable="response",
+                    ),
+                    "e": EndBlock(id="e", name="End"),
+                },
+                connections=[
+                    Connection(source_id="s", target_id="p"),
+                    Connection(source_id="p", target_id="e"),
+                ],
+            ),
+        )
+        _save_cmd(cmd_dir, sub_cmd)
+
+        fc = Flowchart(
+            blocks={
+                "s": StartBlock(id="s", name="Start"),
+                "sp": SpawnBlock(
+                    id="sp", name="Spawn Model",
+                    agent_name="model-worker",
+                    command_name="model-agent",
+                    exit_code_variable="worker_exit",
+                    model="claude-haiku-4-5-20251001",
+                ),
+                "w": WaitBlock(id="w", name="Wait", wait_for=["model-worker"]),
+                "e": EndBlock(id="e", name="End"),
+            },
+            connections=[
+                Connection(source_id="s", target_id="sp"),
+                Connection(source_id="sp", target_id="w"),
+                Connection(source_id="w", target_id="e"),
+            ],
+        )
+
+        # Parent session uses haiku — spawn also uses haiku (via model override)
+        # The key is that a *separate* Session is created for the spawned agent
+        session = Session(
+            name="test-parent",
+            claude_path=self.CLAUDE_PATH,
+            opts={
+                "model": "claude-haiku-4-5-20251001",
+                "max_turns": "1",
+            },
+            protocol=MockProtocol(),
+        )
+
+        try:
+            await session.start()
+
+            walker = GraphWalker(
+                fc, session, {}, MockProtocol(),
+                search_paths=[str(cmd_dir)],
+            )
+            result = await walker.run()
+
+            assert result.status == "completed"
+            assert result.variables.get("worker_exit") == 0
+        finally:
+            await session.stop()

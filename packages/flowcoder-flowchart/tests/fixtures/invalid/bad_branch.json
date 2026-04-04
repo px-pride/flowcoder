@@ -1,0 +1,12 @@
+{
+  "name": "bad-branch",
+  "blocks": {
+    "b1": {"type": "start", "name": "Start"},
+    "b2": {"type": "branch", "name": "Check", "condition": "x"},
+    "b3": {"type": "end", "name": "End"}
+  },
+  "connections": [
+    {"source_id": "b1", "target_id": "b2"},
+    {"source_id": "b2", "target_id": "b3", "is_true_path": true}
+  ]
+}

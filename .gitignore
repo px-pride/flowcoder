@@ -39,3 +39,23 @@ __pycache__/
 # Allow package.json and package-lock.json for npm dependencies
 !package.json
 !package-lock.json
+
+# Allow packages/ directory (vendored Pydantic packages)
+!packages/
+!packages/**
+
+# Allow tests/ directory
+!tests/
+!tests/**
+
+# Allow scripts/
+!scripts/
+!scripts/**
+
+# Allow design_docs/
+!design_docs/
+!design_docs/**
+
+# Allow progress-reports/
+!progress-reports/
+!progress-reports/**
