@@ -5,6 +5,7 @@ Extended with Spawn/Wait/Exit block fixtures and git callback mocks.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,6 +18,7 @@ from flowcoder_flowchart import (
     EndBlock,
     ExitBlock,
     Flowchart,
+    InputBlock,
     PromptBlock,
     RefreshBlock,
     SessionConfig,
@@ -69,8 +71,19 @@ class MockProtocol:
         self.messages: list[dict] = []
         self.logs: list[str] = []
         self.forwarded: list[dict] = []
+        self._inbox: asyncio.Queue[dict] = asyncio.Queue()
 
     def emit(self, msg: dict) -> None:
+        self.messages.append(msg)
+
+    async def read_message(self) -> dict:
+        """Read next message from inbox queue."""
+        return await self._inbox.get()
+
+    def emit_system(self, subtype: str, data: dict | None = None) -> None:
+        msg: dict = {"type": "system", "subtype": subtype}
+        if data:
+            msg["data"] = data
         self.messages.append(msg)
 
     def emit_block_start(self, block_id: str, block_name: str, block_type: str) -> None:

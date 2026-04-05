@@ -29,6 +29,7 @@ from flowcoder_flowchart import (
     EndBlock,
     ExitBlock,
     Flowchart,
+    InputBlock,
     PromptBlock,
     RefreshBlock,
     SpawnBlock,
@@ -273,6 +274,9 @@ class GraphWalker:
             case BlockType.EXIT:
                 assert isinstance(block, ExitBlock)
                 return self._exec_exit(block)
+            case BlockType.INPUT:
+                assert isinstance(block, InputBlock)
+                return await self._exec_input(block)
             case _:
                 return BlockResult.fail(f"Unknown block type: {block.type}")
 
@@ -625,6 +629,41 @@ class GraphWalker:
             f"Exit block '{block.name}': code={block.exit_code}, message={message}"
         )
         return BlockResult.exit(code=block.exit_code, message=message)
+
+    async def _exec_input(self, block: InputBlock) -> BlockResult:
+        """Pause and wait for user input, send to agent, optionally capture response."""
+        self._protocol.log(f"Input block '{block.name}': waiting for user input")
+        self._protocol.emit_system(
+            "input_request",
+            {"block_id": block.id, "block_name": block.name},
+        )
+
+        # Block until we receive an input_response for this block
+        while True:
+            msg = await self._protocol.read_message()
+            if (
+                msg.get("type") == "input_response"
+                and msg.get("block_id") == block.id
+            ):
+                user_text = msg.get("content", "")
+                break
+            # Put unrelated messages back on the inbox for other consumers
+            await self._protocol._inbox.put(msg)
+
+        if not user_text:
+            self._protocol.log(f"Input block '{block.name}': received empty input")
+            return BlockResult.ok(output="")
+
+        # Send user input to the agent session
+        result = await self._session.query(
+            user_text, block_id=block.id, block_name=block.name
+        )
+
+        # Capture response in variable if configured
+        if block.output_variable and result.response_text:
+            self._variables[block.output_variable] = result.response_text
+
+        return BlockResult.ok(output=result.response_text)
 
     async def _cleanup_spawned(self) -> None:
         """Cancel and clean up any remaining spawned tasks and sessions."""

@@ -29,6 +29,7 @@ class BlockType(str, Enum):
     SPAWN = "spawn"
     WAIT = "wait"
     EXIT = "exit"
+    INPUT = "input"
 
 
 class VariableType(str, Enum):
@@ -137,6 +138,12 @@ class ExitBlock(BlockBase):
     exit_message: str = ""
 
 
+class InputBlock(BlockBase):
+    """Pause the flowchart, accept user input, send to the agent session."""
+    type: Literal[BlockType.INPUT] = BlockType.INPUT
+    output_variable: str | None = None
+
+
 Block = Annotated[
     StartBlock
     | EndBlock
@@ -148,6 +155,7 @@ Block = Annotated[
     | RefreshBlock
     | SpawnBlock
     | WaitBlock
-    | ExitBlock,
+    | ExitBlock
+    | InputBlock,
     Field(discriminator="type"),
 ]
