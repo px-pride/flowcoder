@@ -34,11 +34,17 @@ import time
 import flowcoder_flowchart as fc_lib
 from opentelemetry import context as otel_context
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.propagate import extract
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+try:
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.propagate import extract
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    _HAS_OTEL_SDK = True
+except ImportError:
+    _HAS_OTEL_SDK = False
 
 from .cli import build_inner_claude_cmd, build_inner_env, build_variables, parse_args
 from .protocol import ProtocolHandler
@@ -51,8 +57,11 @@ _log = logging.getLogger(__name__)
 _tracer = trace.get_tracer(__name__)
 
 
-def _init_tracing() -> TracerProvider | None:
-    """Set up OTel TracerProvider with OTLP/gRPC exporter."""
+def _init_tracing() -> Any:
+    """Set up OTel TracerProvider with OTLP/gRPC exporter if SDK is available."""
+    if not _HAS_OTEL_SDK:
+        _log.debug("OpenTelemetry SDK not installed, tracing disabled")
+        return None
     endpoint = os.environ.get("OTEL_ENDPOINT", "http://localhost:4317")
     resource = Resource.create({"service.name": "flowcoder-engine"})
     provider = TracerProvider(resource=resource)
@@ -64,6 +73,9 @@ def _init_tracing() -> TracerProvider | None:
 
 def _extract_trace_context(msg: dict) -> otel_context.Context | None:
     """Extract and remove _trace_context from a message, returning an OTel context."""
+    if not _HAS_OTEL_SDK:
+        msg.pop("_trace_context", None)
+        return None
     carrier = msg.pop("_trace_context", None)
     if carrier and isinstance(carrier, dict):
         return extract(carrier)

@@ -7,7 +7,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from flowcoder_flowchart.templates import ArgRef, Literal, VarRef, parse_template
+from flowcoder_flowchart.templates import (
+    ArgRef,
+    Conditional,
+    Literal,
+    TemplatePart,
+    VarRef,
+    parse_template,
+)
 
 
 def _format_value(value: Any) -> str:
@@ -33,6 +40,19 @@ def evaluate_template(text: str, variables: dict[str, Any]) -> str:
         Missing references are left as empty strings.
     """
     parts = parse_template(text)
+    return _evaluate_parts(parts, variables)
+
+
+def _is_truthy(value: Any) -> bool:
+    """Test truthiness for conditional evaluation."""
+    if value is None:
+        return False
+    s = str(value).lower().strip()
+    return bool(value) and s not in ("false", "0", "no", "")
+
+
+def _evaluate_parts(parts: list[TemplatePart], variables: dict[str, Any]) -> str:
+    """Evaluate a list of template parts against variables."""
     result: list[str] = []
 
     for part in parts:
@@ -43,5 +63,8 @@ def evaluate_template(text: str, variables: dict[str, Any]) -> str:
             result.append(_format_value(variables.get(key, "")))
         elif isinstance(part, VarRef):
             result.append(_format_value(variables.get(part.name, "")))
+        elif isinstance(part, Conditional):
+            if _is_truthy(variables.get(part.variable)):
+                result.append(_evaluate_parts(part.parts, variables))
 
     return "".join(result)
