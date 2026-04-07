@@ -1,0 +1,18 @@
+{
+  "name": "chat",
+  "description": "Simple single-prompt example",
+  "flowchart": {
+    "blocks": {
+      "s": {"id": "s", "type": "start", "name": "Start"},
+      "p": {"id": "p", "type": "prompt", "name": "Ask", "prompt": "Hello $1"},
+      "e": {"id": "e", "type": "end", "name": "End"}
+    },
+    "connections": [
+      {"id": "c1", "source_id": "s", "target_id": "p"},
+      {"id": "c2", "source_id": "p", "target_id": "e"}
+    ]
+  },
+  "arguments": [
+    {"name": "topic", "description": "What to chat about"}
+  ]
+}

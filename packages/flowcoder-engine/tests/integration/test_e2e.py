@@ -101,6 +101,8 @@ class _MockProtocol:
     def emit_block_complete(self, *a, **kw): pass
     def emit_result(self, *a, **kw): pass
     def emit_forwarded(self, *a, **kw): pass
+    def emit_system(self, *a, **kw): pass
+    def emit_stderr(self, *a, **kw): pass
     def log(self, msg): self.logs.append(msg)
     async def start(self): pass
     async def stop(self): pass
