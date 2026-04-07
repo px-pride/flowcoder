@@ -15,8 +15,10 @@ from .git_metadata import validate_git_repo_url, validate_git_branch_name
 from .git_repo import GitRepoInitializer, GitInitResult, GitInitializationError
 from .git_remote import GitRemoteManager, GitRemoteResult, GitRemoteError
 from .git_workflow import GitWorkflowOrchestrator, GitWorkflowResult
+from .sdk_message_parser import parse_sdk_message
 
 __all__ = [
+    'parse_sdk_message',
     'VariableSubstitution',
     'PromptSanitizer',
     'SanitizingFormatter',

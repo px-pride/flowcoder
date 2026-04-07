@@ -25,7 +25,10 @@ from src.models import (
     VariableBlock,
     BashBlock,
     BranchBlock,
-    EndBlock
+    EndBlock,
+    ExitBlock,
+    SpawnBlock,
+    WaitBlock,
 )
 from src.models.blocks import CommandBlock
 from src.models.execution import (
@@ -108,8 +111,15 @@ class ExecutionController:
         self.on_prompt_stream = on_prompt_stream
         self.current_context: Optional[ExecutionContext] = None
 
+        # Git workflow callbacks
+        self.on_git_commit: Optional[Callable] = None  # async (block, context) -> None
+        self.on_git_tag: Optional[Callable] = None  # async (tag_name) -> None
+
         # Track running bash processes for cleanup
         self.running_processes = []
+
+        # Track spawned agent sub-sessions: {agent_name: {service, controller, task, context}}
+        self.spawned_sessions: Dict[str, Dict[str, Any]] = {}
 
         # Initialize command block executor if storage service is available
         if self.storage_service:
@@ -318,9 +328,18 @@ class ExecutionController:
                     context.complete(ExecutionStatus.ERROR)
                     break
 
+                # Perform git operations after Prompt/Bash blocks (if not disabled)
+                await self._handle_post_block_git(current_block, result, context)
+
                 # Get next block
-                if current_block.type == BlockType.END:
-                    logger.info("Reached end block, execution complete")
+                if current_block.type in (BlockType.END, BlockType.EXIT):
+                    logger.info(f"Reached {current_block.type.value} block, execution complete")
+                    # For EXIT blocks, store exit code in context
+                    if current_block.type == BlockType.EXIT and result.output:
+                        context.variables["__exit_code__"] = result.output.get("exit_code", 0)
+                    # Kill all spawned sub-sessions on exit
+                    if current_block.type == BlockType.EXIT:
+                        await self._kill_all_spawned_sessions()
                     current_block = None
                 elif current_block.type == BlockType.BRANCH:
                     # Branching handled in _execute_block, it returns next_block_id in output
@@ -515,9 +534,16 @@ class ExecutionController:
                 context.complete(ExecutionStatus.ERROR)
                 break
 
+            # Perform git operations after Prompt/Bash blocks (if not disabled)
+            await self._handle_post_block_git(current_block, result, context)
+
             # Get next block
-            if current_block.type == BlockType.END:
-                logger.info("Reached end block, execution complete")
+            if current_block.type in (BlockType.END, BlockType.EXIT):
+                logger.info(f"Reached {current_block.type.value} block, execution complete")
+                if current_block.type == BlockType.EXIT and result.output:
+                    context.variables["__exit_code__"] = result.output.get("exit_code", 0)
+                if current_block.type == BlockType.EXIT:
+                    await self._kill_all_spawned_sessions()
                 current_block = None
             elif current_block.type == BlockType.BRANCH:
                 # Branching handled in _execute_block, it returns next_block_id in output
@@ -578,8 +604,14 @@ class ExecutionController:
             return await self._execute_command_block(block, context)
         elif block.type == BlockType.END:
             return await self._execute_end_block(block, context)
+        elif block.type == BlockType.EXIT:
+            return await self._execute_exit_block(block, context)
         elif block.type == BlockType.REFRESH:
             return await self._execute_refresh_block(context)
+        elif block.type == BlockType.SPAWN:
+            return await self._execute_spawn_block(block, context)
+        elif block.type == BlockType.WAIT:
+            return await self._execute_wait_block(block, context)
         else:
             return BlockResult.error_result(f"Unknown block type: {block.type}")
 
@@ -1549,6 +1581,337 @@ class ExecutionController:
             f"No variable named '{value_str}', did you mean \"{value_str}\" as a string? "
             f"Literals in conditions must be quoted (strings), boolean keywords (true/false), or numbers."
         )
+
+    async def _execute_exit_block(
+        self,
+        block: ExitBlock,
+        context: ExecutionContext
+    ) -> BlockResult:
+        """Execute exit block - terminates flowchart with an exit code."""
+        logger.debug(f"Executing exit block with code: {block.exit_code}")
+
+        # Apply git tag if specified
+        if block.git_tag:
+            await self._apply_git_tag(block.git_tag, context)
+
+        return BlockResult.success_result(
+            output={"exit_code": block.exit_code},
+            raw_response=f"Exiting with code {block.exit_code}",
+            duration_ms=0
+        )
+
+    async def _execute_spawn_block(
+        self,
+        block: SpawnBlock,
+        context: ExecutionContext
+    ) -> BlockResult:
+        """Execute spawn block - spawns an agent sub-session in its own thread.
+
+        Creates a new agent service instance, execution controller, and runs
+        the specified command asynchronously.
+        """
+        start_time = datetime.now()
+        agent_name = block.agent_name
+
+        try:
+            # Substitute variables in agent name and command name
+            agent_name = VariableSubstitution.substitute_all(
+                block.agent_name,
+                arguments=context.variables,
+                variables=context.variables
+            )
+            command_name = VariableSubstitution.substitute_all(
+                block.command_name,
+                arguments=context.variables,
+                variables=context.variables
+            )
+
+            logger.info(f"Spawning agent sub-session: {agent_name} -> /{command_name}")
+
+            # Check if agent already exists and is executing
+            if agent_name in self.spawned_sessions:
+                existing = self.spawned_sessions[agent_name]
+                task = existing.get("task")
+                if task and not task.done():
+                    return BlockResult.error_result(
+                        f"Agent '{agent_name}' is already executing a command. "
+                        f"Wait for it to complete before spawning again."
+                    )
+                # Reuse existing session (not currently executing)
+                logger.info(f"Reusing existing agent sub-session: {agent_name}")
+
+            # Load the command to execute
+            if not self.storage_service:
+                return BlockResult.error_result(
+                    "Spawn blocks require storage_service to be provided"
+                )
+
+            try:
+                cmd = self.storage_service.load_command(command_name)
+            except Exception as e:
+                return BlockResult.error_result(
+                    f"Failed to load command '{command_name}' for spawn: {e}"
+                )
+
+            # Parse arguments
+            arguments_dict = {}
+            if block.arguments:
+                args_str = VariableSubstitution.substitute_all(
+                    block.arguments,
+                    arguments=context.variables,
+                    variables=context.variables
+                )
+                try:
+                    arguments_dict = cmd.parse_arguments(args_str)
+                except Exception as e:
+                    return BlockResult.error_result(f"Argument error for spawn: {e}")
+
+            # Inherit variables if configured
+            if block.inherit_variables:
+                arguments_dict.update(context.variables)
+
+            # Create a new agent service for the sub-session
+            from src.services.service_factory import ServiceFactory
+
+            # Determine config for spawned agent
+            service_type = "claude"  # Default
+            service_kwargs = {}
+            if block.config_file:
+                # Load config to determine service type
+                try:
+                    from src.services.config_service import ConfigService
+                    config_svc = ConfigService()
+                    config = config_svc.load_config(block.config_file)
+                    if hasattr(config, 'model'):
+                        service_kwargs["model"] = config.model
+                    # Detect if codex config
+                    if block.config_file.endswith('.codexconfig'):
+                        service_type = "codex"
+                except Exception as e:
+                    logger.warning(f"Could not load config '{block.config_file}': {e}")
+
+            sub_service = ServiceFactory.create_service(
+                service_type=service_type,
+                cwd=str(self.agent_service.cwd),
+                permission_mode="bypassPermissions",
+                **service_kwargs,
+            )
+
+            sub_controller = ExecutionController(
+                agent_service=sub_service,
+                storage_service=self.storage_service,
+            )
+
+            # Create execution copy
+            exec_flowchart = cmd.create_execution_copy()
+
+            # Run the command asynchronously
+            async def _run_spawned():
+                try:
+                    await sub_service.ensure_session()
+                    child_context = await sub_controller.execute(
+                        command=cmd,
+                        arguments=arguments_dict,
+                        flowchart=exec_flowchart,
+                    )
+                    return child_context
+                except Exception as e:
+                    logger.error(f"Spawned agent '{agent_name}' failed: {e}")
+                    raise
+
+            task = asyncio.create_task(_run_spawned())
+
+            # Store the spawned session
+            self.spawned_sessions[agent_name] = {
+                "service": sub_service,
+                "controller": sub_controller,
+                "task": task,
+                "command_name": command_name,
+            }
+
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            logger.info(f"Agent '{agent_name}' spawned successfully")
+
+            return BlockResult.success_result(
+                output={"spawned_agent": agent_name},
+                raw_response=f"Spawned agent '{agent_name}' running /{command_name}",
+                duration_ms=duration_ms
+            )
+
+        except Exception as e:
+            logger.error(f"Error spawning agent '{agent_name}': {e}", exc_info=True)
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            return BlockResult.error_result(
+                f"Error spawning agent '{agent_name}': {e}",
+                duration_ms=duration_ms
+            )
+
+    async def _execute_wait_block(
+        self,
+        block: WaitBlock,
+        context: ExecutionContext
+    ) -> BlockResult:
+        """Execute wait block - waits for spawned agents to complete.
+
+        For each agent, merges variables with "{agent_name}." prefix
+        into the main context. Optionally kills the session.
+        """
+        start_time = datetime.now()
+
+        try:
+            output_dict = {}
+
+            for entry in block.entries:
+                agent_name = entry.agent_name
+
+                if agent_name not in self.spawned_sessions:
+                    return BlockResult.error_result(
+                        f"Agent '{agent_name}' was not spawned. "
+                        f"Use a Spawn block before Wait."
+                    )
+
+                session_info = self.spawned_sessions[agent_name]
+                task = session_info.get("task")
+
+                if task and not task.done():
+                    logger.info(f"Waiting for agent '{agent_name}' to complete...")
+                    try:
+                        child_context = await task
+                    except Exception as e:
+                        logger.error(f"Agent '{agent_name}' failed: {e}")
+                        return BlockResult.error_result(
+                            f"Agent '{agent_name}' failed: {e}"
+                        )
+                elif task:
+                    # Task already done, get the result
+                    try:
+                        child_context = task.result()
+                    except Exception as e:
+                        return BlockResult.error_result(
+                            f"Agent '{agent_name}' failed: {e}"
+                        )
+                else:
+                    logger.warning(f"Agent '{agent_name}' has no task")
+                    child_context = None
+
+                # Merge variables with prefix
+                if child_context and hasattr(child_context, 'variables'):
+                    for var_name, var_value in child_context.variables.items():
+                        prefixed_name = f"{agent_name}.{var_name}"
+                        context.variables[prefixed_name] = var_value
+                        output_dict[prefixed_name] = var_value
+
+                # Turn off the agent service
+                sub_service = session_info.get("service")
+                if sub_service:
+                    try:
+                        await sub_service.end_session()
+                    except Exception as e:
+                        logger.warning(f"Error ending session for '{agent_name}': {e}")
+
+                # Kill session if configured
+                if entry.kill_session:
+                    del self.spawned_sessions[agent_name]
+                    logger.info(f"Killed session for agent '{agent_name}'")
+
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            agents_waited = [e.agent_name for e in block.entries]
+            logger.info(f"Wait completed for agents: {agents_waited}")
+
+            return BlockResult.success_result(
+                output=output_dict if output_dict else None,
+                raw_response=f"Waited for agents: {', '.join(agents_waited)}",
+                duration_ms=duration_ms
+            )
+
+        except Exception as e:
+            logger.error(f"Error in wait block: {e}", exc_info=True)
+            duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+            return BlockResult.error_result(f"Wait error: {e}", duration_ms=duration_ms)
+
+    async def _kill_all_spawned_sessions(self) -> None:
+        """Kill all spawned agent sub-sessions (called on EXIT block)."""
+        for agent_name, session_info in list(self.spawned_sessions.items()):
+            task = session_info.get("task")
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+            sub_service = session_info.get("service")
+            if sub_service:
+                try:
+                    await sub_service.end_session()
+                except Exception:
+                    pass
+
+        self.spawned_sessions.clear()
+        logger.info("All spawned sessions killed")
+
+    async def _handle_post_block_git(
+        self,
+        block: Block,
+        result: BlockResult,
+        context: ExecutionContext
+    ) -> None:
+        """Handle automatic git commit/push after Prompt and Bash blocks.
+
+        Per the design doc:
+        - After Prompt/Bash blocks finish, git add + commit (and push if auto-push)
+        - Unless the block's disable_auto_git flag is set
+        - Optionally apply a git tag
+        """
+        if not result.success:
+            return
+
+        # Only auto-git for Prompt and Bash blocks
+        if block.type not in (BlockType.PROMPT, BlockType.BASH):
+            return
+
+        # Check if auto-git is disabled for this block
+        disable_git = getattr(block, 'disable_auto_git', False)
+        if disable_git:
+            logger.debug(f"Auto-git disabled for block '{block.name}'")
+            return
+
+        # Check for parent suppress flag (set by CommandBlock.suppress_child_auto_git)
+        if context.variables.get("__suppress_auto_git__", False):
+            logger.debug(f"Auto-git suppressed by parent command for block '{block.name}'")
+            return
+
+        # Trigger git commit via callback
+        if self.on_git_commit:
+            try:
+                if inspect.iscoroutinefunction(self.on_git_commit):
+                    await self.on_git_commit(block, context)
+                else:
+                    self.on_git_commit(block, context)
+            except Exception as e:
+                logger.error(f"Git commit callback failed: {e}")
+
+        # Apply git tag if specified
+        git_tag = getattr(block, 'git_tag', None)
+        if git_tag:
+            await self._apply_git_tag(git_tag, context)
+
+    async def _apply_git_tag(self, tag_name: str, context: ExecutionContext) -> None:
+        """Apply a git tag, substituting variables in the tag name."""
+        try:
+            resolved_tag = VariableSubstitution.substitute_all(
+                tag_name,
+                arguments=context.variables,
+                variables=context.variables
+            )
+            if self.on_git_tag:
+                if inspect.iscoroutinefunction(self.on_git_tag):
+                    await self.on_git_tag(resolved_tag)
+                else:
+                    self.on_git_tag(resolved_tag)
+            logger.info(f"Applied git tag: {resolved_tag}")
+        except Exception as e:
+            logger.error(f"Failed to apply git tag '{tag_name}': {e}")
 
     def _get_block_by_id(self, flowchart: Flowchart, block_id: str) -> Optional[Block]:
         """Get a block from the flowchart by ID."""

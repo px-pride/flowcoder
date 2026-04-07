@@ -1,0 +1,20 @@
+{
+  "name": "branching-flow",
+  "description": "A flowchart with a branch",
+  "blocks": {
+    "b1": {"type": "start", "name": "Start"},
+    "b2": {"type": "prompt", "name": "Check", "prompt": "Is $1 valid?", "output_schema": {"valid": "boolean"}},
+    "b3": {"type": "branch", "name": "Valid?", "condition": "valid"},
+    "b4": {"type": "prompt", "name": "Success", "prompt": "Great, $1 is valid!"},
+    "b5": {"type": "prompt", "name": "Failure", "prompt": "Sorry, $1 is not valid."},
+    "b6": {"type": "end", "name": "End"}
+  },
+  "connections": [
+    {"source_id": "b1", "target_id": "b2"},
+    {"source_id": "b2", "target_id": "b3"},
+    {"source_id": "b3", "target_id": "b4", "is_true_path": true},
+    {"source_id": "b3", "target_id": "b5", "is_true_path": false},
+    {"source_id": "b4", "target_id": "b6"},
+    {"source_id": "b5", "target_id": "b6"}
+  ]
+}

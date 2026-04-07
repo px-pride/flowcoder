@@ -6,14 +6,16 @@ Defines all block types used in flowcharts:
 - StartBlock
 - PromptBlock
 - BranchBlock
-- EndBlock
+- EndBlock / ExitBlock
 - VariableBlock
 - BashBlock
 - CommandBlock
 - RefreshBlock
+- SpawnBlock
+- WaitBlock
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from enum import Enum
 import uuid
@@ -25,10 +27,56 @@ class BlockType(str, Enum):
     PROMPT = "prompt"
     BRANCH = "branch"
     END = "end"
-    COMMAND = "command"  # NEW in v2.0 - invokes other commands
-    VARIABLE = "variable"  # NEW - sets a variable to a value
-    BASH = "bash"  # NEW - executes bash commands
-    REFRESH = "refresh"  # NEW - refreshes the agent session
+    COMMAND = "command"  # Invokes other commands
+    VARIABLE = "variable"  # Sets a variable to a value
+    BASH = "bash"  # Executes bash commands
+    REFRESH = "refresh"  # Refreshes the agent session
+    SPAWN = "spawn"  # Spawns an agent sub-session
+    WAIT = "wait"  # Waits for spawned agent sessions
+    EXIT = "exit"  # Exits flowchart with exit code
+
+
+@dataclass
+class VariableEntry:
+    """A single variable entry for multi-entry VariableBlock."""
+    variable_name: str
+    variable_value: str
+    variable_type: str = "string"  # string, int, float, boolean
+
+    def to_dict(self) -> dict:
+        return {
+            "variable_name": self.variable_name,
+            "variable_value": self.variable_value,
+            "variable_type": self.variable_type,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'VariableEntry':
+        return cls(
+            variable_name=data["variable_name"],
+            variable_value=data.get("variable_value", ""),
+            variable_type=data.get("variable_type", "string"),
+        )
+
+
+@dataclass
+class WaitEntry:
+    """A single entry for WaitBlock — identifies an agent to wait on."""
+    agent_name: str
+    kill_session: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "agent_name": self.agent_name,
+            "kill_session": self.kill_session,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'WaitEntry':
+        return cls(
+            agent_name=data["agent_name"],
+            kill_session=data.get("kill_session", False),
+        )
 
 
 @dataclass
@@ -122,6 +170,12 @@ class Block:
             return CommandBlock.from_dict(data)
         elif block_type == BlockType.REFRESH:
             return RefreshBlock.from_dict(data)
+        elif block_type == BlockType.EXIT:
+            return ExitBlock.from_dict(data)
+        elif block_type == BlockType.SPAWN:
+            return SpawnBlock.from_dict(data)
+        elif block_type == BlockType.WAIT:
+            return WaitBlock.from_dict(data)
         else:
             raise ValueError(f"Unknown block type: {block_type}")
 
@@ -156,6 +210,8 @@ class PromptBlock(Block):
     prompt: str = ""
     output_schema: Optional[Dict[str, Any]] = None
     sound_effect: Optional[str] = None
+    disable_auto_git: bool = False
+    git_tag: Optional[str] = None
 
     def __init__(
         self,
@@ -164,7 +220,9 @@ class PromptBlock(Block):
         position: Position = None,
         prompt: str = "",
         output_schema: Optional[Dict[str, Any]] = None,
-        sound_effect: Optional[str] = None
+        sound_effect: Optional[str] = None,
+        disable_auto_git: bool = False,
+        git_tag: Optional[str] = None,
     ):
         if position is None:
             position = Position(100, 150)
@@ -177,6 +235,8 @@ class PromptBlock(Block):
         self.prompt = prompt
         self.output_schema = output_schema
         self.sound_effect = sound_effect
+        self.disable_auto_git = disable_auto_git
+        self.git_tag = git_tag
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -184,7 +244,9 @@ class PromptBlock(Block):
         data.update({
             "prompt": self.prompt,
             "output_schema": self.output_schema,
-            "sound_effect": self.sound_effect
+            "sound_effect": self.sound_effect,
+            "disable_auto_git": self.disable_auto_git,
+            "git_tag": self.git_tag,
         })
         return data
 
@@ -197,7 +259,9 @@ class PromptBlock(Block):
             position=Position.from_dict(data["position"]),
             prompt=data.get("prompt", ""),
             output_schema=data.get("output_schema"),
-            sound_effect=data.get("sound_effect")
+            sound_effect=data.get("sound_effect"),
+            disable_auto_git=data.get("disable_auto_git", False),
+            git_tag=data.get("git_tag"),
         )
 
 
@@ -352,6 +416,8 @@ class BashBlock(Block):
     working_directory: str = ""  # Optional override for working directory
     continue_on_error: bool = False  # Continue workflow even if command fails
     exit_code_variable: str = ""  # Optional variable name to store exit code
+    disable_auto_git: bool = False  # Skip auto-git for this block
+    git_tag: Optional[str] = None  # Optional git tag after execution
 
     def __init__(
         self,
@@ -364,7 +430,9 @@ class BashBlock(Block):
         output_type: str = "string",
         working_directory: str = "",
         continue_on_error: bool = False,
-        exit_code_variable: str = ""
+        exit_code_variable: str = "",
+        disable_auto_git: bool = False,
+        git_tag: Optional[str] = None,
     ):
         if position is None:
             position = Position(100, 250)
@@ -381,6 +449,8 @@ class BashBlock(Block):
         self.working_directory = working_directory
         self.continue_on_error = continue_on_error
         self.exit_code_variable = exit_code_variable
+        self.disable_auto_git = disable_auto_git
+        self.git_tag = git_tag
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -392,7 +462,9 @@ class BashBlock(Block):
             "output_type": self.output_type,
             "working_directory": self.working_directory,
             "continue_on_error": self.continue_on_error,
-            "exit_code_variable": self.exit_code_variable
+            "exit_code_variable": self.exit_code_variable,
+            "disable_auto_git": self.disable_auto_git,
+            "git_tag": self.git_tag,
         })
         return data
 
@@ -409,7 +481,9 @@ class BashBlock(Block):
             output_type=data.get("output_type", "string"),
             working_directory=data.get("working_directory", ""),
             continue_on_error=data.get("continue_on_error", False),
-            exit_code_variable=data.get("exit_code_variable", "")
+            exit_code_variable=data.get("exit_code_variable", ""),
+            disable_auto_git=data.get("disable_auto_git", False),
+            git_tag=data.get("git_tag"),
         )
 
     def validate(self) -> List[str]:
@@ -440,11 +514,18 @@ class CommandBlock(Block):
 
     This allows commands to call other commands, enabling
     composition and reusability.
+
+    The command_name field supports variable substitution ({{varname}}, $N),
+    enabling dynamic dispatch — the command to invoke can be determined
+    at runtime from execution context variables.
     """
-    command_name: str = ""  # Name of command to execute
+    command_name: str = ""  # Name of command to execute (supports {{varname}} and $N)
     arguments: str = ""  # Arguments to pass (may contain variables)
     inherit_variables: bool = False  # Pass parent variables to child
     merge_output: bool = False  # Merge child output into parent scope
+    exit_code_variable: str = ""  # Variable to store child exit code
+    suppress_child_auto_git: bool = False  # Suppress auto-git in child flowchart
+    git_tag: Optional[str] = None  # Optional git tag after execution
 
     def __init__(
         self,
@@ -454,7 +535,10 @@ class CommandBlock(Block):
         command_name: str = "",
         arguments: str = "",
         inherit_variables: bool = False,
-        merge_output: bool = False
+        merge_output: bool = False,
+        exit_code_variable: str = "",
+        suppress_child_auto_git: bool = False,
+        git_tag: Optional[str] = None,
     ):
         if position is None:
             position = Position(100, 250)
@@ -468,6 +552,9 @@ class CommandBlock(Block):
         self.arguments = arguments
         self.inherit_variables = inherit_variables
         self.merge_output = merge_output
+        self.exit_code_variable = exit_code_variable
+        self.suppress_child_auto_git = suppress_child_auto_git
+        self.git_tag = git_tag
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -476,7 +563,10 @@ class CommandBlock(Block):
             "command_name": self.command_name,
             "arguments": self.arguments,
             "inherit_variables": self.inherit_variables,
-            "merge_output": self.merge_output
+            "merge_output": self.merge_output,
+            "exit_code_variable": self.exit_code_variable,
+            "suppress_child_auto_git": self.suppress_child_auto_git,
+            "git_tag": self.git_tag,
         })
         return data
 
@@ -490,7 +580,10 @@ class CommandBlock(Block):
             command_name=data.get("command_name", ""),
             arguments=data.get("arguments", ""),
             inherit_variables=data.get("inherit_variables", False),
-            merge_output=data.get("merge_output", False)
+            merge_output=data.get("merge_output", False),
+            exit_code_variable=data.get("exit_code_variable", ""),
+            suppress_child_auto_git=data.get("suppress_child_auto_git", False),
+            git_tag=data.get("git_tag"),
         )
 
     def validate(self) -> List[str]:
@@ -535,6 +628,191 @@ class RefreshBlock(Block):
         )
 
 
+@dataclass
+class ExitBlock(Block):
+    """Exit block - exits flowchart with an exit code.
+
+    Unlike EndBlock (which simply marks completion), ExitBlock terminates
+    the flowchart with a specific exit code and optionally tags the git state.
+    This recursively kills all spawned agent sub-sessions.
+    """
+    exit_code: int = 0
+    git_tag: Optional[str] = None
+
+    def __init__(
+        self,
+        id: str = "",
+        name: str = "Exit",
+        position: Position = None,
+        exit_code: int = 0,
+        git_tag: Optional[str] = None,
+    ):
+        if position is None:
+            position = Position(100, 350)
+        super().__init__(
+            id=id or str(uuid.uuid4()),
+            type=BlockType.EXIT,
+            name=name,
+            position=position
+        )
+        self.exit_code = exit_code
+        self.git_tag = git_tag
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data.update({
+            "exit_code": self.exit_code,
+            "git_tag": self.git_tag,
+        })
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'ExitBlock':
+        return cls(
+            id=data["id"],
+            name=data.get("name", "Exit"),
+            position=Position.from_dict(data["position"]),
+            exit_code=data.get("exit_code", 0),
+            git_tag=data.get("git_tag"),
+        )
+
+    def validate(self) -> List[str]:
+        errors = []
+        if not isinstance(self.exit_code, int):
+            errors.append("Exit code must be an integer")
+        return errors
+
+
+@dataclass
+class SpawnBlock(Block):
+    """Spawn block - spawns an agent sub-session running a command.
+
+    Creates a new agent session in its own thread that executes
+    the specified slash command. Throws an error if an agent
+    sub-session with the same name is already executing.
+    """
+    agent_name: str = ""
+    command_name: str = ""
+    arguments: str = ""
+    inherit_variables: bool = False
+    exit_code_variable: str = ""
+    config_file: str = ""  # .claudeconfig or .codexconfig to use
+
+    def __init__(
+        self,
+        id: str = "",
+        name: str = "Spawn",
+        position: Position = None,
+        agent_name: str = "",
+        command_name: str = "",
+        arguments: str = "",
+        inherit_variables: bool = False,
+        exit_code_variable: str = "",
+        config_file: str = "",
+    ):
+        if position is None:
+            position = Position(100, 250)
+        super().__init__(
+            id=id or str(uuid.uuid4()),
+            type=BlockType.SPAWN,
+            name=name,
+            position=position
+        )
+        self.agent_name = agent_name
+        self.command_name = command_name
+        self.arguments = arguments
+        self.inherit_variables = inherit_variables
+        self.exit_code_variable = exit_code_variable
+        self.config_file = config_file
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data.update({
+            "agent_name": self.agent_name,
+            "command_name": self.command_name,
+            "arguments": self.arguments,
+            "inherit_variables": self.inherit_variables,
+            "exit_code_variable": self.exit_code_variable,
+            "config_file": self.config_file,
+        })
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'SpawnBlock':
+        return cls(
+            id=data["id"],
+            name=data.get("name", "Spawn"),
+            position=Position.from_dict(data["position"]),
+            agent_name=data.get("agent_name", ""),
+            command_name=data.get("command_name", ""),
+            arguments=data.get("arguments", ""),
+            inherit_variables=data.get("inherit_variables", False),
+            exit_code_variable=data.get("exit_code_variable", ""),
+            config_file=data.get("config_file", ""),
+        )
+
+    def validate(self) -> List[str]:
+        errors = []
+        if not self.agent_name:
+            errors.append("Agent name is required")
+        if not self.command_name:
+            errors.append("Command name is required")
+        return errors
+
+
+@dataclass
+class WaitBlock(Block):
+    """Wait block - waits for spawned agent sessions to complete.
+
+    For each agent session, merges variables into the main session's
+    scope with "{agent_name}." prefix. Optionally kills the sessions.
+    """
+    entries: List[WaitEntry] = field(default_factory=list)
+
+    def __init__(
+        self,
+        id: str = "",
+        name: str = "Wait",
+        position: Position = None,
+        entries: Optional[List[WaitEntry]] = None,
+    ):
+        if position is None:
+            position = Position(100, 250)
+        super().__init__(
+            id=id or str(uuid.uuid4()),
+            type=BlockType.WAIT,
+            name=name,
+            position=position
+        )
+        self.entries = entries if entries is not None else []
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data.update({
+            "entries": [e.to_dict() for e in self.entries],
+        })
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'WaitBlock':
+        entries = [WaitEntry.from_dict(e) for e in data.get("entries", [])]
+        return cls(
+            id=data["id"],
+            name=data.get("name", "Wait"),
+            position=Position.from_dict(data["position"]),
+            entries=entries,
+        )
+
+    def validate(self) -> List[str]:
+        errors = []
+        if not self.entries:
+            errors.append("At least one wait entry is required")
+        for i, entry in enumerate(self.entries):
+            if not entry.agent_name:
+                errors.append(f"Entry {i+1}: agent name is required")
+        return errors
+
+
 # Factory function for creating blocks
 def create_block(block_type: BlockType, **kwargs) -> Block:
     """Factory function to create blocks of the appropriate type."""
@@ -554,5 +832,11 @@ def create_block(block_type: BlockType, **kwargs) -> Block:
         return CommandBlock(**kwargs)
     elif block_type == BlockType.REFRESH:
         return RefreshBlock(**kwargs)
+    elif block_type == BlockType.EXIT:
+        return ExitBlock(**kwargs)
+    elif block_type == BlockType.SPAWN:
+        return SpawnBlock(**kwargs)
+    elif block_type == BlockType.WAIT:
+        return WaitBlock(**kwargs)
     else:
         raise ValueError(f"Unknown block type: {block_type}")

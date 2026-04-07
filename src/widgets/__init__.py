@@ -9,6 +9,7 @@ from .session_tab_widget import SessionTabWidget
 from .new_session_dialog import NewSessionDialog
 from .file_explorer_widget import FileExplorerWidget
 from .line_numbered_text import LineNumberedText
+from .collapsible_frame import CollapsibleFrame
 
 __all__ = [
     'SessionsListWidget',
@@ -16,4 +17,5 @@ __all__ = [
     'NewSessionDialog',
     'FileExplorerWidget',
     'LineNumberedText',
+    'CollapsibleFrame',
 ]

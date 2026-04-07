@@ -72,6 +72,10 @@ class CommandBlockExecutor:
         """
         Execute a command block.
 
+        Supports dynamic command names via variable substitution — the
+        command_name field can contain {{varname}} or $N patterns that
+        are resolved from the execution context at runtime.
+
         Args:
             block: The command block to execute
             parent_context: Parent execution context
@@ -84,9 +88,13 @@ class CommandBlockExecutor:
             MaxRecursionDepthError: If recursion depth exceeded
             CommandBlockExecutorError: If child execution fails
         """
+        # Resolve dynamic command name (supports {{varname}} and $N substitution)
+        resolved_name = self._resolve_command_name(block.command_name, parent_context)
+
         logger.info(
-            f"Executing command block: {block.command_name} "
-            f"(depth={parent_context.depth}, stack={parent_context.get_call_chain()})"
+            f"Executing command block: {resolved_name} "
+            f"(template='{block.command_name}', "
+            f"depth={parent_context.depth}, stack={parent_context.get_call_chain()})"
         )
 
         # Check recursion depth
@@ -94,18 +102,19 @@ class CommandBlockExecutor:
             raise MaxRecursionDepthError(
                 f"Maximum recursion depth ({parent_context.max_depth}) exceeded.\n"
                 f"Call stack: {parent_context.get_call_chain()}\n"
-                f"Cannot execute command: {block.command_name}"
+                f"Cannot execute command: {resolved_name}"
             )
 
         # Load target command
-        command = self._load_command(block.command_name)
+        command = self._load_command(resolved_name)
         if not command:
             raise CommandNotFoundError(
-                f"Command not found: {block.command_name}. "
+                f"Command not found: '{resolved_name}' "
+                f"(resolved from '{block.command_name}'). "
                 f"Ensure the command exists before invoking it."
             )
 
-        # Check for recursion (Phase 5.6)
+        # Check for recursion using the resolved name (Phase 5.6)
         try:
             parent_context.push_call_stack(command.name)
         except CommandRecursionError as e:
@@ -165,6 +174,66 @@ class CommandBlockExecutor:
 
         # Return child outputs
         return child_context.variables
+
+    def _resolve_command_name(
+        self,
+        command_name: str,
+        context: ExecutionContext
+    ) -> str:
+        """
+        Resolve a command name, substituting any variables.
+
+        Enables first-order functions in flowcharts — the command to execute
+        can be determined dynamically from variables or arguments.
+
+        Args:
+            command_name: Raw command name (may contain {{varname}} or $N)
+            context: Current execution context
+
+        Returns:
+            Resolved command name string
+
+        Raises:
+            CommandBlockExecutorError: If substitution fails (e.g., missing variable)
+
+        Examples:
+            "analyze-code" → "analyze-code"  (static, unchanged)
+            "{{tool}}" → "lint-code"  (resolved from context variable)
+            "$1" → "deploy-prod"  (resolved from positional argument)
+        """
+        if not command_name:
+            raise CommandBlockExecutorError("Command name is empty")
+
+        # Check if substitution is needed (contains {{ or $ followed by digit)
+        if '{{' not in command_name and not any(
+            command_name[i] == '$' and i + 1 < len(command_name) and command_name[i + 1].isdigit()
+            for i in range(len(command_name))
+        ):
+            return command_name  # Static name, no substitution needed
+
+        try:
+            resolved = VariableSubstitution.substitute_all(
+                text=command_name,
+                arguments=context.variables,
+                variables=context.variables
+            )
+            resolved = resolved.strip()
+
+            if not resolved:
+                raise CommandBlockExecutorError(
+                    f"Command name '{command_name}' resolved to empty string. "
+                    f"Check that the referenced variable is set."
+                )
+
+            if resolved != command_name:
+                logger.info(f"Dynamic command name resolved: '{command_name}' → '{resolved}'")
+
+            return resolved
+
+        except ValueError as e:
+            raise CommandBlockExecutorError(
+                f"Failed to resolve dynamic command name '{command_name}': {e}"
+            ) from e
 
     def _load_command(self, command_name: str) -> Optional[Command]:
         """

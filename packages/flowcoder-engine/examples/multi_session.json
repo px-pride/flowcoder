@@ -1,0 +1,40 @@
+{
+  "name": "code-review",
+  "description": "Two-session code review loop",
+  "flowchart": {
+    "blocks": {
+      "s": {"id": "s", "type": "start", "name": "Start"},
+      "code": {
+        "id": "code", "type": "prompt", "name": "Write Code",
+        "prompt": "Write code for: $1",
+        "session": "coder",
+        "output_variable": "code_output"
+      },
+      "review": {
+        "id": "review", "type": "prompt", "name": "Review Code",
+        "prompt": "Review this code:\n{{code_output}}",
+        "session": "reviewer",
+        "output_schema": {"approved": "boolean", "feedback": "string"}
+      },
+      "check": {
+        "id": "check", "type": "branch", "name": "Approved?",
+        "condition": "approved"
+      },
+      "e": {"id": "e", "type": "end", "name": "End"}
+    },
+    "connections": [
+      {"id": "c1", "source_id": "s", "target_id": "code"},
+      {"id": "c2", "source_id": "code", "target_id": "review"},
+      {"id": "c3", "source_id": "review", "target_id": "check"},
+      {"id": "c4", "source_id": "check", "target_id": "e", "is_true_path": true},
+      {"id": "c5", "source_id": "check", "target_id": "code", "is_true_path": false}
+    ],
+    "sessions": {
+      "coder": {"model": "sonnet"},
+      "reviewer": {"model": "haiku"}
+    }
+  },
+  "arguments": [
+    {"name": "task", "description": "What code to write"}
+  ]
+}

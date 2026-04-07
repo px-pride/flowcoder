@@ -21,6 +21,7 @@ from ..utils import (
     validate_git_branch_name,
     GitWorkflowOrchestrator,
 )
+from .collapsible_frame import CollapsibleFrame
 
 logger = logging.getLogger(__name__)
 
@@ -140,30 +141,33 @@ class SessionTabWidget(ttk.Frame):
             )
             restart_btn.pack(side=tk.RIGHT, padx=5)
 
-        # Session info panel (working directory, service, and system prompt)
-        info_frame = ttk.LabelFrame(self, text="Session Information", padding=5)
+        # Session info panel (working directory, service, and system prompt) - collapsible
+        info_frame = CollapsibleFrame(self, title="Session Information", collapsed=True, padding=5)
         info_frame.pack(fill=tk.X, pady=(0, 5))
         info_frame.columnconfigure(1, weight=1)
+
+        # Get the content frame for adding child widgets
+        info_content = info_frame.content_frame
 
         # AI Service
         from ..services.service_factory import ServiceFactory
         service_display = ServiceFactory.get_service_display_name(self.session.service_type)
 
-        svc_label = ttk.Label(info_frame, text="AI Service:", font=('TkDefaultFont', 9, 'bold'))
+        svc_label = ttk.Label(info_content, text="AI Service:", font=('TkDefaultFont', 9, 'bold'))
         svc_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
 
-        svc_value = ttk.Label(info_frame, text=service_display, font=('TkDefaultFont', 9))
+        svc_value = ttk.Label(info_content, text=service_display, font=('TkDefaultFont', 9))
         svc_value.grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
 
         # Working directory
-        wd_label = ttk.Label(info_frame, text="Working Directory:", font=('TkDefaultFont', 9, 'bold'))
+        wd_label = ttk.Label(info_content, text="Working Directory:", font=('TkDefaultFont', 9, 'bold'))
         wd_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
 
-        wd_value = ttk.Label(info_frame, text=self.session.working_directory, font=('TkDefaultFont', 9))
+        wd_value = ttk.Label(info_content, text=self.session.working_directory, font=('TkDefaultFont', 9))
         wd_value.grid(row=1, column=1, sticky=tk.W, padx=5, pady=2)
 
         # System prompt
-        sp_label = ttk.Label(info_frame, text="System Prompt:", font=('TkDefaultFont', 9, 'bold'))
+        sp_label = ttk.Label(info_content, text="System Prompt:", font=('TkDefaultFont', 9, 'bold'))
         sp_label.grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
 
         # Truncate system prompt if it's very long
@@ -171,28 +175,28 @@ class SessionTabWidget(ttk.Frame):
         if len(system_prompt_display) > 100:
             system_prompt_display = system_prompt_display[:97] + "..."
 
-        sp_value = ttk.Label(info_frame, text=system_prompt_display, font=('TkDefaultFont', 9))
+        sp_value = ttk.Label(info_content, text=system_prompt_display, font=('TkDefaultFont', 9))
         sp_value.grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
 
-        ttk.Label(info_frame, text="Git Repo URL:", font=('TkDefaultFont', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(info_content, text="Git Repo URL:", font=('TkDefaultFont', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
         self.git_repo_var = tk.StringVar(value=self.session.git_repo_url or "")
-        self.git_repo_entry = ttk.Entry(info_frame, textvariable=self.git_repo_var)
+        self.git_repo_entry = ttk.Entry(info_content, textvariable=self.git_repo_var)
         self.git_repo_entry.grid(row=3, column=1, sticky=tk.EW, padx=5, pady=2)
 
         ttk.Label(
-            info_frame,
+            info_content,
             text="Example: https://github.com/org/repo.git or git@github.com:org/repo.git",
             font=('TkDefaultFont', 8),
             foreground="gray"
         ).grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(0, 4))
 
-        ttk.Label(info_frame, text="Git Branch:", font=('TkDefaultFont', 9, 'bold')).grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(info_content, text="Git Branch:", font=('TkDefaultFont', 9, 'bold')).grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
         self.git_branch_var = tk.StringVar(value=self.session.git_branch or "")
-        self.git_branch_entry = ttk.Entry(info_frame, textvariable=self.git_branch_var)
+        self.git_branch_entry = ttk.Entry(info_content, textvariable=self.git_branch_var)
         self.git_branch_entry.grid(row=5, column=1, sticky=tk.EW, padx=5, pady=2)
 
         ttk.Label(
-            info_frame,
+            info_content,
             text="Allowed: letters, numbers, '/', '.', '_', '-'. Leave blank to track default branch.",
             font=('TkDefaultFont', 8),
             foreground="gray"
@@ -200,17 +204,17 @@ class SessionTabWidget(ttk.Frame):
 
         self.git_auto_push_var = tk.BooleanVar(value=self.session.git_auto_push)
         self.git_auto_push_check = ttk.Checkbutton(
-            info_frame,
+            info_content,
             text="Auto-push",
             variable=self.git_auto_push_var
         )
         self.git_auto_push_check.grid(row=7, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(2, 0))
 
-        self.git_save_btn = ttk.Button(info_frame, text="Save Git Settings", command=self._save_git_settings)
+        self.git_save_btn = ttk.Button(info_content, text="Save Git Settings", command=self._save_git_settings)
         self.git_save_btn.grid(row=8, column=0, columnspan=2, sticky=tk.E, padx=5, pady=(5, 0))
 
         self.git_retry_btn = ttk.Button(
-            info_frame,
+            info_content,
             text="Retry Git Sync",
             command=self._retry_git_workflow,
             state=tk.DISABLED
@@ -425,182 +429,16 @@ class SessionTabWidget(ttk.Frame):
         """
         Parse SDK message object and extract text content and metadata.
 
+        Delegates to the shared utility in src.utils.sdk_message_parser.
+
         Args:
             sdk_message: Message object from Claude Agent SDK or plain text from Codex
 
         Returns:
             tuple: (text_content, verbose_content, message_type)
-
-        Note:
-            message_type can be:
-            - "assistant" for Claude SDK structured messages (TextBlocks)
-            - "assistant_plain" for Codex plain text chunks
-            - "system", "result", "unknown" for other message types
         """
-
-        message_str = str(sdk_message)
-        message_type = "unknown"
-        text_content = ""
-        verbose_content = message_str
-
-        # Check if this is a Claude SDK structured message or plain text (Codex)
-        is_structured_message = any(marker in message_str for marker in
-                                   ["AssistantMessage", "SystemMessage", "ResultMessage", "StreamEvent", "UserMessage"])
-
-        # Try to parse the message
-        try:
-            # Check if this is a StreamEvent (new Claude Agent SDK format)
-            if "StreamEvent" in message_str and "event=" in message_str:
-                # Extract text from content_block_delta events using regex
-                # This is more robust than ast.literal_eval which fails on escaped newlines
-                # Format: event={'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': '...'}}
-
-                # First check if this is a content_block_delta event
-                # Use flexible string matching to handle both escaped and unescaped quotes
-                if "content_block_delta" in message_str and "text_delta" in message_str:
-                    # Extract the text value using regex
-                    # Match various quote combinations to handle Python's repr() escaping
-                    import re
-
-                    # Try different patterns (repr() uses different quote combinations)
-                    patterns = [
-                        r"'text':\s*'((?:[^'\\]|\\.)*)'",      # 'text': '...'
-                        r'"text":\s*"((?:[^"\\]|\\.)*)"',      # "text": "..."
-                        r"\\'text\\':\s*\"((?:[^\"\\]|\\.)*?)\"",  # \'text\': "..." (escaped key, double value)
-                        r"'text':\s*\"((?:[^\"\\]|\\.)*?)\"",  # 'text': "..." (unescaped key, double value)
-                    ]
-
-                    text_match = None
-                    for pattern in patterns:
-                        text_match = re.search(pattern, message_str)
-                        if text_match:
-                            break
-
-                    if text_match:
-                        message_type = "text_delta"  # Changed from "assistant" to distinguish from AssistantMessage
-                        # Extract the text and unescape it
-                        text_content = text_match.group(1)
-                        # Unescape common escape sequences
-                        text_content = text_content.replace('\\n', '\n')
-                        text_content = text_content.replace('\\t', '\t')
-                        text_content = text_content.replace('\\r', '\r')
-                        text_content = text_content.replace("\\'", "'")
-                        text_content = text_content.replace('\\"', '"')
-                        text_content = text_content.replace('\\\\', '\\')
-
-                        verbose_content = f"[StreamEvent] {text_content}"
-                        logger.debug(f"Parsed StreamEvent chunk: {len(text_content)} chars")
-                        return (text_content, verbose_content, message_type)
-
-                # Check for other event types
-                if "content_block_start" in message_str:
-                    return ("", "", "content_block_start")
-
-                event_type_checks = [
-                    "message_start", "message_stop", "content_block_stop", "message_delta"
-                ]
-                if any(event_type in message_str for event_type in event_type_checks):
-                    logger.debug("Ignoring StreamEvent system message")
-                    return ("", "", "system")
-
-            # Determine message type
-            elif "AssistantMessage" in message_str:
-                message_type = "assistant"
-                # Extract text from TextBlock
-                # Format: AssistantMessage(content=[TextBlock(text="...")], ...)
-                # Try double quotes first
-                start = message_str.find('TextBlock(text="')
-                if start != -1:
-                    start += len('TextBlock(text="')
-                    end = message_str.find('")', start)
-                    if end != -1:
-                        text_content = message_str[start:end]
-                        text_content = text_content.replace('\\n', '\n')
-                else:
-                    # Try single quotes (slash commands use single quotes)
-                    start = message_str.find("TextBlock(text='")
-                    if start != -1:
-                        start += len("TextBlock(text='")
-                        end = message_str.find("')", start)
-                        if end != -1:
-                            text_content = message_str[start:end]
-                            text_content = text_content.replace('\\n', '\n')
-
-            elif "SystemMessage" in message_str:
-                message_type = "system"
-                text_content = "[System initialization]"
-
-            elif "UserMessage" in message_str:
-                # Tool results - filter these out, don't display
-                message_type = "result"
-                text_content = ""  # Don't extract text, just classify as result
-
-            elif "ResultMessage" in message_str:
-                message_type = "result"
-                # Extract result field
-                start = message_str.find("result=\"")
-                if start != -1:
-                    start += len("result=\"")
-                    end = message_str.find('")', start)
-                    if end == -1:
-                        # Try finding just closing quote
-                        end = message_str.rfind('"')
-                    if end != -1:
-                        text_content = message_str[start:end]
-                        text_content = text_content.replace('\\n', '\n')
-
-            # Create pretty verbose output
-            try:
-                # Try to make it more readable
-                verbose_lines = []
-                if "AssistantMessage" in message_str:
-                    verbose_lines.append("📤 Assistant Message:")
-                    if text_content:
-                        verbose_lines.append(f"   Content: {text_content[:100]}...")
-                elif "SystemMessage" in message_str:
-                    verbose_lines.append("⚙️  System Message:")
-                    if "session_id" in message_str:
-                        # Extract session_id
-                        sid_start = message_str.find("'session_id': '") + len("'session_id': '")
-                        sid_end = message_str.find("'", sid_start)
-                        if sid_end != -1:
-                            session_id = message_str[sid_start:sid_end]
-                            verbose_lines.append(f"   Session: {session_id}")
-                elif "ResultMessage" in message_str:
-                    verbose_lines.append("✅ Result Message:")
-                    # Extract duration
-                    if "duration_ms" in message_str:
-                        dur_start = message_str.find("duration_ms=") + len("duration_ms=")
-                        dur_end = message_str.find(",", dur_start)
-                        if dur_end != -1:
-                            duration = message_str[dur_start:dur_end]
-                            verbose_lines.append(f"   Duration: {duration}ms")
-                    # Extract cost
-                    if "total_cost_usd" in message_str:
-                        cost_start = message_str.find("total_cost_usd=") + len("total_cost_usd=")
-                        cost_end = message_str.find(",", cost_start)
-                        if cost_end != -1:
-                            cost = message_str[cost_start:cost_end]
-                            verbose_lines.append(f"   Cost: ${cost}")
-
-                if verbose_lines:
-                    verbose_content = "\n".join(verbose_lines)
-
-            except:
-                pass  # Fall back to raw string
-
-        except Exception as e:
-            logger.warning(f"Failed to parse SDK message: {e}")
-            text_content = message_str
-
-        # Handle plain text messages (e.g., from Codex)
-        # If no structured markers found and no text extracted, treat as plain text
-        if not is_structured_message and not text_content and message_str.strip():
-            message_type = "assistant_plain"
-            text_content = message_str
-            logger.debug(f"Parsed plain text chunk: {len(text_content)} chars")
-
-        return (text_content, verbose_content, message_type)
+        from src.utils.sdk_message_parser import parse_sdk_message
+        return parse_sdk_message(sdk_message)
 
     async def _send_passthrough_message_async(self, message: str):
         """

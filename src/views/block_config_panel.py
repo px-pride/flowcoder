@@ -528,8 +528,17 @@ class BlockConfigPanel(ttk.Frame):
         # Bind autosave on name change
         self.name_entry.bind('<KeyRelease>', self._schedule_autosave)
 
-        # Command name dropdown
+        # Command name (dropdown + free text for dynamic names)
         ttk.Label(self.content_frame, text="Command to Invoke:").pack(anchor=tk.W, padx=10, pady=(10, 0))
+
+        # Help text for dynamic command names
+        cmd_help_text = ttk.Label(
+            self.content_frame,
+            text="Select a command or use {{varname}} / $N for dynamic dispatch",
+            foreground='gray',
+            font=('TkDefaultFont', 8)
+        )
+        cmd_help_text.pack(anchor=tk.W, padx=10)
 
         # Get list of available commands
         command_names = []
@@ -540,13 +549,13 @@ class BlockConfigPanel(ttk.Frame):
             except Exception as e:
                 logger.error(f"Error loading command list: {e}")
 
-        # Command dropdown
+        # Command dropdown (always editable to allow variable syntax)
         self.command_name_var = tk.StringVar(value=block.command_name or "")
         command_dropdown = ttk.Combobox(
             self.content_frame,
             textvariable=self.command_name_var,
             values=command_names,
-            state='readonly' if command_names else 'normal'
+            state='normal'
         )
         command_dropdown.pack(fill=tk.X, padx=10, pady=(0, 10))
 
@@ -595,12 +604,14 @@ class BlockConfigPanel(ttk.Frame):
             "from within a flowchart, enabling composition and\n"
             "reusability.\n"
             "\n"
-            "• Select which command to invoke\n"
+            "• Select a command or type a dynamic name\n"
+            "• Use {{varname}} or $N for dynamic dispatch\n"
             "• Pass arguments (can reference parent variables)\n"
             "• Choose whether to merge child output back\n"
             "\n"
-            "Example: Invoke 'analyze-code' with arguments:\n"
-            "  $1 {{mode}}"
+            "Static:  command name = analyze-code\n"
+            "Dynamic: command name = {{tool}}\n"
+            "         (resolved at runtime from variables)"
         )
         info_label = ttk.Label(
             info_frame,

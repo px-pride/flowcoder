@@ -1,0 +1,29 @@
+[project]
+name = "flowcoder-engine"
+version = "0.1.0"
+description = "Flowchart execution engine — speaks stream-json protocol for claude-code-sdk"
+requires-python = ">=3.12"
+dependencies = [
+    "flowcoder-flowchart>=0.1.0",
+    "opentelemetry-api>=1.20.0",
+]
+
+[project.scripts]
+flowcoder-engine = "flowcoder_engine.__main__:main_sync"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flowcoder_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

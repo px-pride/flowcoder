@@ -28,6 +28,9 @@ dev = [
 testpaths = ["tests"]
 addopts = "--strict-markers"
 asyncio_mode = "auto"
+markers = [
+    "slow: marks tests that use real claude CLI (costs tokens, deselect with '-m \"not slow\"')",
+]
 
 [tool.ruff]
 line-length = 120

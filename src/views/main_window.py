@@ -306,6 +306,16 @@ class MainWindow:
         style.configure('Treeview.Heading', background=dark_bg, foreground=dark_fg)
         style.map('Treeview', background=[('selected', dark_select_bg)], foreground=[('selected', dark_fg)])
 
+        # tkfilebrowser dark mode styling
+        # The library looks up "ttk.Treeview" (non-standard) instead of "Treeview"
+        style.configure('ttk.Treeview', fieldbackground=dark_input_bg)
+        # Configure tkfilebrowser-specific styles
+        style.configure('right.tkfilebrowser.Treeview',
+                        background=dark_input_bg, foreground=dark_fg, fieldbackground=dark_input_bg)
+        style.configure('left.tkfilebrowser.Treeview',
+                        background=dark_input_bg, foreground=dark_fg, fieldbackground=dark_input_bg)
+        style.configure('listbox.tkfilebrowser.TFrame', background=dark_input_bg, relief='sunken')
+
         # Configure root window background
         self.root.configure(bg=dark_bg)
 
@@ -1348,6 +1358,10 @@ Created with Claude Agent SDK
         Note: The Claude SDK may not call this callback consistently.
               Currently used for system messages and diagnostics.
         """
+        # Skip empty or whitespace-only messages
+        if not message or not message.strip():
+            return
+
         # Send to verbose chat panel
         # Note: chat_panel may be None during initialization
         if self.chat_panel:
