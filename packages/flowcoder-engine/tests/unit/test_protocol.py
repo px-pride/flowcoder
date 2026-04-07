@@ -49,15 +49,20 @@ class TestEmit:
         assert msg["subtype"] == "flowchart_complete"
         assert msg["data"]["status"] == "completed"
 
-    def test_emit_forwarded_unwrapped(self):
-        """emit_forwarded emits the inner message as-is (no wrapping)."""
+    def test_emit_forwarded_with_provenance(self):
+        """emit_forwarded wraps the inner message with session/block context."""
         p = ProtocolHandler()
         inner = {"type": "assistant", "message": {"content": "hello"}}
         captured = io.StringIO()
         with patch.object(sys, "stdout", captured):
             p.emit_forwarded(inner, "main", "b1", "Block1")
         msg = json.loads(captured.getvalue().strip())
-        assert msg == inner
+        assert msg["type"] == "system"
+        assert msg["subtype"] == "session_message"
+        assert msg["data"]["session"] == "main"
+        assert msg["data"]["block_id"] == "b1"
+        assert msg["data"]["block_name"] == "Block1"
+        assert msg["data"]["message"] == inner
 
     def test_emit_result(self):
         p = ProtocolHandler()
