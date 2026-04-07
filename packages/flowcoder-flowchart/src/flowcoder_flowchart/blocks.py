@@ -21,6 +21,10 @@ class BlockType(StrEnum):
     BASH = "bash"
     COMMAND = "command"
     REFRESH = "refresh"
+    SPAWN = "spawn"
+    WAIT = "wait"
+    EXIT = "exit"
+    INPUT = "input"
 
 
 # Pride compat: map int/float to number
@@ -109,6 +113,42 @@ class RefreshBlock(BlockBase):
     target_session: str | None = None
 
 
+class SpawnBlock(BlockBase):
+    """Spawn a named agent sub-session running a command asynchronously."""
+
+    type: Literal[BlockType.SPAWN] = BlockType.SPAWN
+    agent_name: str = ""
+    command_name: str = ""
+    arguments: str = ""
+    inherit_variables: bool = False
+    exit_code_variable: str | None = None
+    config_file: str | None = None
+    model: str | None = None
+
+
+class WaitBlock(BlockBase):
+    """Wait for one or more spawned agent sessions to complete."""
+
+    type: Literal[BlockType.WAIT] = BlockType.WAIT
+    wait_for: list[str] = Field(default_factory=list)
+    timeout_seconds: int | None = None
+
+
+class ExitBlock(BlockBase):
+    """Explicitly exit the flowchart with a given exit code."""
+
+    type: Literal[BlockType.EXIT] = BlockType.EXIT
+    exit_code: int = 0
+    exit_message: str = ""
+
+
+class InputBlock(BlockBase):
+    """Pause the flowchart, accept user input, send to the agent session."""
+
+    type: Literal[BlockType.INPUT] = BlockType.INPUT
+    output_variable: str | None = None
+
+
 Block = Annotated[
     StartBlock
     | EndBlock
@@ -117,6 +157,10 @@ Block = Annotated[
     | VariableBlock
     | BashBlock
     | CommandBlock
-    | RefreshBlock,
+    | RefreshBlock
+    | SpawnBlock
+    | WaitBlock
+    | ExitBlock
+    | InputBlock,
     Field(discriminator="type"),
 ]

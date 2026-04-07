@@ -11,7 +11,14 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from .blocks import BlockType, BranchBlock, CommandBlock, PromptBlock
+from .blocks import (
+    BlockType,
+    BranchBlock,
+    CommandBlock,
+    PromptBlock,
+    SpawnBlock,
+    WaitBlock,
+)
 
 if TYPE_CHECKING:
     from .models import Flowchart
@@ -107,9 +114,23 @@ def validate(flowchart: Flowchart) -> ValidationResult:
                 f"Command block '{block.name or bid}' has empty command_name"
             )
 
-    # Non-branch, non-end blocks should have at least one outgoing connection
+    # Spawn blocks: non-empty command_name
     for bid, block in flowchart.blocks.items():
-        if block.type == BlockType.END:
+        if isinstance(block, SpawnBlock) and not block.command_name.strip():
+            errors.append(
+                f"Spawn block '{block.name or bid}' has empty command_name"
+            )
+
+    # Wait blocks: non-empty wait_for
+    for bid, block in flowchart.blocks.items():
+        if isinstance(block, WaitBlock) and len(block.wait_for) == 0:
+            errors.append(
+                f"Wait block '{block.name or bid}' has empty wait_for list"
+            )
+
+    # Non-branch, non-end, non-exit blocks should have at least one outgoing connection
+    for bid, block in flowchart.blocks.items():
+        if block.type in (BlockType.END, BlockType.EXIT):
             continue
         outgoing = [c for c in flowchart.connections if c.source_id == bid]
         if len(outgoing) == 0 and block.type != BlockType.END:
