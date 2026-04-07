@@ -9,24 +9,21 @@ Run with: pytest tests/integration/ -v
 
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 
 import pytest
-
+from flowcoder_engine.session import Session
+from flowcoder_engine.walker import GraphWalker
 from flowcoder_flowchart import (
     Connection,
     EndBlock,
     Flowchart,
     PromptBlock,
-    SessionConfig,
     StartBlock,
     VariableBlock,
 )
 
-from flowcoder_engine.session import Session
-from flowcoder_engine.walker import GraphWalker
 from tests.conftest import MockProtocol
 
 # ── Skip if claude not available ──────────────────────────────────────

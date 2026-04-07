@@ -1,36 +1,23 @@
-"""Shared fixtures for engine tests.
-
-Extended with Spawn/Wait/Exit block fixtures and git callback mocks.
-"""
+"""Shared fixtures for engine tests."""
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock
-
 import pytest
-
+from flowcoder_engine.session import QueryResult
 from flowcoder_flowchart import (
     BashBlock,
     BranchBlock,
     CommandBlock,
     Connection,
     EndBlock,
-    ExitBlock,
     Flowchart,
-    InputBlock,
     PromptBlock,
     RefreshBlock,
     SessionConfig,
-    SpawnBlock,
     StartBlock,
     VariableBlock,
     VariableType,
-    WaitBlock,
 )
-
-from flowcoder_engine.protocol import ProtocolHandler
-from flowcoder_engine.session import QueryResult
 
 
 class MockSession:
@@ -71,19 +58,8 @@ class MockProtocol:
         self.messages: list[dict] = []
         self.logs: list[str] = []
         self.forwarded: list[dict] = []
-        self._inbox: asyncio.Queue[dict] = asyncio.Queue()
 
     def emit(self, msg: dict) -> None:
-        self.messages.append(msg)
-
-    async def read_message(self) -> dict:
-        """Read next message from inbox queue."""
-        return await self._inbox.get()
-
-    def emit_system(self, subtype: str, data: dict | None = None) -> None:
-        msg: dict = {"type": "system", "subtype": subtype}
-        if data:
-            msg["data"] = data
         self.messages.append(msg)
 
     def emit_block_start(self, block_id: str, block_name: str, block_type: str) -> None:
@@ -119,22 +95,6 @@ class MockProtocol:
 
     def log(self, message: str) -> None:
         self.logs.append(message)
-
-    async def start(self) -> None:
-        pass
-
-    async def stop(self) -> None:
-        pass
-
-    async def forward_control_request(self, inner_request: dict) -> dict:
-        """Mock: auto-allow control requests."""
-        return {
-            "type": "control_response",
-            "response": {
-                "request_id": inner_request.get("request_id", ""),
-                "allowed": True,
-            },
-        }
 
 
 @pytest.fixture
@@ -304,69 +264,5 @@ def command_flowchart() -> Flowchart:
         connections=[
             Connection(source_id="s", target_id="c"),
             Connection(source_id="c", target_id="e"),
-        ],
-    )
-
-
-# ── New fixtures for extended block types ────────────────────────────
-
-
-@pytest.fixture
-def exit_flowchart() -> Flowchart:
-    """start -> exit(code=42)"""
-    return Flowchart(
-        blocks={
-            "s": StartBlock(id="s", name="Start"),
-            "x": ExitBlock(id="x", name="Bail", exit_code=42, exit_message="Explicit exit"),
-            "e": EndBlock(id="e", name="End"),  # unreachable
-        },
-        connections=[
-            Connection(source_id="s", target_id="x"),
-            Connection(source_id="x", target_id="e"),
-        ],
-    )
-
-
-@pytest.fixture
-def git_tag_flowchart() -> Flowchart:
-    """start -> prompt (with git_tag) -> end"""
-    return Flowchart(
-        blocks={
-            "s": StartBlock(id="s", name="Start"),
-            "p": PromptBlock(
-                id="p", name="Deploy",
-                prompt="Deploy to production",
-                git_tag="deploy-{{version}}",
-            ),
-            "e": EndBlock(id="e", name="End"),
-        },
-        connections=[
-            Connection(source_id="s", target_id="p"),
-            Connection(source_id="p", target_id="e"),
-        ],
-    )
-
-
-@pytest.fixture
-def conditional_prompt_flowchart() -> Flowchart:
-    """start -> set_debug -> prompt (with conditional) -> end"""
-    return Flowchart(
-        blocks={
-            "s": StartBlock(id="s", name="Start"),
-            "v": VariableBlock(
-                id="v", name="Set Debug",
-                variable_name="debug", variable_value="true",
-                variable_type=VariableType.BOOLEAN,
-            ),
-            "p": PromptBlock(
-                id="p", name="Ask",
-                prompt="Hello<if debug> [DEBUG MODE]</if> World",
-            ),
-            "e": EndBlock(id="e", name="End"),
-        },
-        connections=[
-            Connection(source_id="s", target_id="v"),
-            Connection(source_id="v", target_id="p"),
-            Connection(source_id="p", target_id="e"),
         ],
     )

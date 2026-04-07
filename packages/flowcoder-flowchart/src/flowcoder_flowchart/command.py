@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
 
-from .models import Argument, Flowchart
+from .models import Argument, Flowchart  # noqa: TC001
 
 
 class CommandMetadata(BaseModel):
@@ -17,7 +17,6 @@ class CommandMetadata(BaseModel):
     version: str = "1.0"
     author: str | None = None
     tags: list[str] = Field(default_factory=list)
-    description: str = ""
 
 
 class Command(BaseModel):

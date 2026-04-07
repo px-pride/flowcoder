@@ -5,6 +5,7 @@ description = "Flowchart execution engine — speaks stream-json protocol for cl
 requires-python = ">=3.12"
 dependencies = [
     "flowcoder-flowchart>=0.1.0",
+    "opentelemetry-api>=1.20.0",
 ]
 
 [project.scripts]

@@ -1,11 +1,9 @@
 """Tests for CommandBlock execution (composition)."""
 
-import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
+from flowcoder_engine.walker import GraphWalker
 from flowcoder_flowchart import (
     Command,
     CommandBlock,
@@ -17,8 +15,7 @@ from flowcoder_flowchart import (
     VariableBlock,
 )
 
-from flowcoder_engine.walker import ExecutionError, GraphWalker
-from tests.conftest import MockSession, MockProtocol
+from tests.conftest import MockProtocol, MockSession
 
 
 def _write_command(tmpdir: Path, name: str, cmd: Command) -> None:

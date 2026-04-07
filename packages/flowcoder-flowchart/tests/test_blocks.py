@@ -1,8 +1,6 @@
 """Tests for block types and discriminated union."""
 
 import pytest
-from pydantic import TypeAdapter
-
 from flowcoder_flowchart import (
     BashBlock,
     Block,
@@ -17,6 +15,7 @@ from flowcoder_flowchart import (
     VariableBlock,
     VariableType,
 )
+from pydantic import TypeAdapter
 
 BlockAdapter = TypeAdapter(Block)
 
@@ -152,7 +151,7 @@ class TestBlockDiscriminatedUnion:
         assert isinstance(b, RefreshBlock)
 
     def test_invalid_type_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match="invalid"):
             BlockAdapter.validate_python({"type": "invalid", "name": "X"})
 
     def test_roundtrip(self):

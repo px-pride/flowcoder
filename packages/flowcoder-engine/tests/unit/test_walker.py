@@ -1,22 +1,18 @@
 """Tests for the GraphWalker with mock sessions."""
 
 import pytest
-
+from flowcoder_engine.walker import ExecutionError, GraphWalker
 from flowcoder_flowchart import (
     BashBlock,
-    BranchBlock,
     Connection,
     EndBlock,
     Flowchart,
-    InputBlock,
-    PromptBlock,
     StartBlock,
     VariableBlock,
     VariableType,
 )
 
-from flowcoder_engine.walker import ExecutionError, GraphWalker
-from tests.conftest import MockSession, MockProtocol
+from tests.conftest import MockProtocol, MockSession
 
 
 @pytest.fixture
@@ -336,156 +332,3 @@ class TestProtocolMessages:
         walker = GraphWalker(simple_flowchart, mock_session, {"$1": "X"}, mock_protocol)
         await walker.run()
         assert any("Executing block" in log for log in mock_protocol.logs)
-
-
-class TestInputBlock:
-    """Tests for InputBlock — pauses for user input, sends to agent."""
-
-    @pytest.fixture
-    def input_flowchart(self) -> Flowchart:
-        """start -> input -> end"""
-        return Flowchart(
-            blocks={
-                "s": StartBlock(id="s", name="Start"),
-                "i": InputBlock(id="i", name="Get Input"),
-                "e": EndBlock(id="e", name="End"),
-            },
-            connections=[
-                Connection(source_id="s", target_id="i"),
-                Connection(source_id="i", target_id="e"),
-            ],
-        )
-
-    @pytest.fixture
-    def input_capture_flowchart(self) -> Flowchart:
-        """start -> input (with output_variable) -> end"""
-        return Flowchart(
-            blocks={
-                "s": StartBlock(id="s", name="Start"),
-                "i": InputBlock(
-                    id="i", name="Get Input",
-                    output_variable="agent_response",
-                ),
-                "e": EndBlock(id="e", name="End"),
-            },
-            connections=[
-                Connection(source_id="s", target_id="i"),
-                Connection(source_id="i", target_id="e"),
-            ],
-        )
-
-    @pytest.mark.asyncio
-    async def test_input_block_sends_to_session(
-        self, input_flowchart, mock_session, mock_protocol
-    ):
-        """InputBlock sends user text to the agent session."""
-        # Pre-load the response that the walker will receive
-        await mock_protocol._inbox.put({
-            "type": "input_response",
-            "block_id": "i",
-            "content": "Hello agent",
-        })
-
-        walker = GraphWalker(input_flowchart, mock_session, {}, mock_protocol)
-        result = await walker.run()
-
-        assert result.status == "completed"
-        assert mock_session._call_count == 1
-
-    @pytest.mark.asyncio
-    async def test_input_block_emits_input_request(
-        self, input_flowchart, mock_session, mock_protocol
-    ):
-        """InputBlock emits an input_request system event."""
-        await mock_protocol._inbox.put({
-            "type": "input_response",
-            "block_id": "i",
-            "content": "test input",
-        })
-
-        walker = GraphWalker(input_flowchart, mock_session, {}, mock_protocol)
-        await walker.run()
-
-        input_requests = [
-            m for m in mock_protocol.messages
-            if m.get("subtype") == "input_request"
-        ]
-        assert len(input_requests) == 1
-        assert input_requests[0]["data"]["block_id"] == "i"
-        assert input_requests[0]["data"]["block_name"] == "Get Input"
-
-    @pytest.mark.asyncio
-    async def test_input_block_captures_response(
-        self, input_capture_flowchart, mock_session, mock_protocol
-    ):
-        """InputBlock stores agent response in output_variable."""
-        await mock_protocol._inbox.put({
-            "type": "input_response",
-            "block_id": "i",
-            "content": "What is 2+2?",
-        })
-
-        walker = GraphWalker(input_capture_flowchart, mock_session, {}, mock_protocol)
-        result = await walker.run()
-
-        assert result.status == "completed"
-        assert result.variables.get("agent_response") == "Mock response"
-
-    @pytest.mark.asyncio
-    async def test_input_block_no_capture(
-        self, input_flowchart, mock_session, mock_protocol
-    ):
-        """InputBlock without output_variable doesn't store response."""
-        await mock_protocol._inbox.put({
-            "type": "input_response",
-            "block_id": "i",
-            "content": "Hello",
-        })
-
-        walker = GraphWalker(input_flowchart, mock_session, {}, mock_protocol)
-        result = await walker.run()
-
-        assert result.status == "completed"
-        assert "agent_response" not in result.variables
-
-    @pytest.mark.asyncio
-    async def test_input_block_empty_input(
-        self, input_flowchart, mock_session, mock_protocol
-    ):
-        """InputBlock with empty content skips session query."""
-        await mock_protocol._inbox.put({
-            "type": "input_response",
-            "block_id": "i",
-            "content": "",
-        })
-
-        walker = GraphWalker(input_flowchart, mock_session, {}, mock_protocol)
-        result = await walker.run()
-
-        assert result.status == "completed"
-        # Empty input skips the session query
-        assert mock_session._call_count == 0
-
-    @pytest.mark.asyncio
-    async def test_input_block_ignores_wrong_block_id(
-        self, input_flowchart, mock_session, mock_protocol
-    ):
-        """InputBlock ignores input_response for wrong block_id."""
-        # First message has wrong block_id — should be re-queued
-        await mock_protocol._inbox.put({
-            "type": "input_response",
-            "block_id": "wrong_id",
-            "content": "Wrong block",
-        })
-        # Second message has correct block_id
-        await mock_protocol._inbox.put({
-            "type": "input_response",
-            "block_id": "i",
-            "content": "Correct input",
-        })
-
-        walker = GraphWalker(input_flowchart, mock_session, {}, mock_protocol)
-        result = await walker.run()
-
-        assert result.status == "completed"
-        assert mock_session._call_count == 1

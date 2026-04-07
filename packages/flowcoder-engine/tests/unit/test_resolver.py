@@ -1,14 +1,11 @@
 """Tests for command resolution."""
 
-import json
 import tempfile
 from pathlib import Path
 
 import pytest
-
-from flowcoder_flowchart import Command, Connection, EndBlock, Flowchart, PromptBlock, StartBlock
-
 from flowcoder_engine.resolver import CommandNotFoundError, resolve_command
+from flowcoder_flowchart import Command, Connection, EndBlock, Flowchart, PromptBlock, StartBlock
 
 
 @pytest.fixture

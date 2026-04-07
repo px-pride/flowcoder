@@ -5,16 +5,13 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from flowcoder_flowchart import (
     Argument,
     Command,
-    CommandMetadata,
     Connection,
     EndBlock,
     Flowchart,
     PromptBlock,
-    SessionConfig,
     StartBlock,
     dump,
     dump_command,
@@ -144,7 +141,7 @@ class TestCommand:
             )
 
     def test_command_invalid_name_empty(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="non-empty"):
             Command(name="", flowchart=Flowchart(blocks={}))
 
     def test_command_valid_names(self):

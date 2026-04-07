@@ -1,57 +1,188 @@
-"""Main entry point for the flowcoder-engine binary."""
+"""Flowcoder engine — transparent Claude CLI proxy with flowchart execution.
+
+Behaves identically to `claude -p --input-format stream-json --output-format
+stream-json`.  Proxies all stdin/stdout transparently to an inner Claude
+subprocess.  When a user message contains a slash command that matches a
+known flowchart command, the engine takes over, runs the flowchart, emits
+structured events, then resumes proxying.
+
+Architecture
+------------
+A background ``_MessageRouter`` continuously reads from engine stdin and
+dispatches messages into two asyncio queues:
+
+* **control_response_queue** — forwarded to inner Claude immediately by a
+  background drainer task, or consumed by ``_handle_control_request``
+  during flowchart takeover.
+* **message_queue** — everything else (user messages, control_requests,
+  shutdown, etc.) consumed by the main loop.
+
+This eliminates deadlocks: control_responses always reach inner Claude
+regardless of what the main loop is doing.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 import signal
 import sys
+import time
 
 import flowcoder_flowchart as fc_lib
+from opentelemetry import context as otel_context
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.propagate import extract
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from .cli import build_variables, parse_args
-from .claude_discovery import find_claude
+from .cli import build_inner_claude_cmd, build_inner_env, build_variables, parse_args
 from .protocol import ProtocolHandler
 from .resolver import CommandNotFoundError, resolve_command
 from .session import Session
+from .subprocess import ClaudeProcess, find_claude
 from .walker import ExecutionError, GraphWalker
 
+_log = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
-async def _run_flowchart(
-    session: Session,
-    flowchart: fc_lib.Flowchart,
-    variables: dict,
-    protocol: ProtocolHandler,
-    args: object,
-) -> None:
-    """Execute a single flowchart and emit its result."""
-    walker = GraphWalker(
-        flowchart, session, variables, protocol,
-        max_blocks=args.max_blocks,
-        search_paths=args.search_paths or [],
-    )
 
-    protocol.busy = True
-    try:
-        result = await walker.run()
-        protocol.emit_result(
-            json.dumps(result.variables),
-            is_error=result.status != "completed",
-            duration_ms=result.duration_ms,
-            num_turns=len(result.log),
-            total_cost_usd=session.total_cost,
-        )
-    except ExecutionError as e:
-        protocol.emit_result(str(e), is_error=True)
-    except Exception as e:
-        protocol.emit_result(f"Unexpected error: {e}", is_error=True)
-    finally:
-        protocol.busy = False
+def _init_tracing() -> TracerProvider | None:
+    """Set up OTel TracerProvider with OTLP/gRPC exporter."""
+    endpoint = os.environ.get("OTEL_ENDPOINT", "http://localhost:4317")
+    resource = Resource.create({"service.name": "flowcoder-engine"})
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True)))
+    trace.set_tracer_provider(provider)
+    _log.info("OpenTelemetry tracing initialized (endpoint=%s)", endpoint)
+    return provider
+
+
+def _extract_trace_context(msg: dict) -> otel_context.Context | None:
+    """Extract and remove _trace_context from a message, returning an OTel context."""
+    carrier = msg.pop("_trace_context", None)
+    if carrier and isinstance(carrier, dict):
+        return extract(carrier)
+    return None
+
+
+_TIMESTAMP_RE = __import__("re").compile(
+    r"^\[[\d\-T:+ ]+(?:UTC)?\]\s*"
+)
+
+
+def _parse_slash_command(text: str) -> tuple[str, str] | None:
+    """Parse a slash command from text like '/story "a dragon"'.
+
+    Handles optional timestamp prefix from the bot framework, e.g.
+    '[2026-03-02 20:12:50 UTC] /story "a dragon"'.
+
+    Returns (command_name, args_string) or None if not a slash command.
+    """
+    text = text.strip()
+    # Strip optional timestamp prefix (e.g. "[2026-03-02 20:12:50 UTC] ")
+    text = _TIMESTAMP_RE.sub("", text)
+    if not text.startswith("/"):
+        return None
+    parts = text[1:].split(None, 1)
+    if not parts:
+        return None
+    return (parts[0], parts[1] if len(parts) > 1 else "")
+
+
+class _StdinReader:
+    """Async line reader for stdin."""
+
+    def __init__(self) -> None:
+        self._reader: asyncio.StreamReader | None = None
+
+    async def start(self) -> None:
+        loop = asyncio.get_running_loop()
+        self._reader = asyncio.StreamReader()
+
+        async def _pump() -> None:
+            try:
+                while True:
+                    line = await loop.run_in_executor(
+                        None, sys.stdin.buffer.readline
+                    )
+                    if not line:
+                        self._reader.feed_eof()
+                        break
+                    self._reader.feed_data(line)
+            except (OSError, ValueError):
+                self._reader.feed_eof()
+
+        asyncio.create_task(_pump())
+
+    async def read_message(self) -> dict | None:
+        """Read one JSON message from stdin.  Returns None on EOF."""
+        assert self._reader is not None
+        while True:
+            line = await self._reader.readline()
+            if not line:
+                return None
+            text = line.decode().strip()
+            if not text:
+                continue
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                continue
+
+
+class _MessageRouter:
+    """Reads stdin and routes messages into typed queues.
+
+    Runs a background task that continuously reads from ``_StdinReader``
+    and dispatches each message to either the control_response queue or
+    the general message queue.  This ensures control_responses are never
+    blocked behind unread user messages (or vice-versa).
+    """
+
+    def __init__(self, stdin_reader: _StdinReader) -> None:
+        self._stdin = stdin_reader
+        self.message_queue: asyncio.Queue[dict | None] = asyncio.Queue()
+        self.control_response_queue: asyncio.Queue[dict | None] = asyncio.Queue()
+        self._task: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        self._task = asyncio.create_task(self._route())
+
+    async def _route(self) -> None:
+        """Read stdin forever, dispatching to queues."""
+        while True:
+            msg = await self._stdin.read_message()
+            if msg is None:
+                # Signal EOF to both queues
+                await self.message_queue.put(None)
+                await self.control_response_queue.put(None)
+                return
+            if msg.get("type") == "control_response":
+                await self.control_response_queue.put(msg)
+            else:
+                await self.message_queue.put(msg)
+
+    async def read_message(self) -> dict | None:
+        """Read the next non-control-response message."""
+        return await self.message_queue.get()
+
+    async def read_control_response(self) -> dict | None:
+        """Read the next control_response."""
+        return await self.control_response_queue.get()
 
 
 async def main() -> None:
+    global _tracer
     args = parse_args()
     protocol = ProtocolHandler()
+
+    otel_provider = _init_tracing()
+    _tracer = trace.get_tracer(__name__)
 
     # Find claude binary
     try:
@@ -60,70 +191,59 @@ async def main() -> None:
         protocol.emit_result(str(e), is_error=True)
         sys.exit(1)
 
-    # Set up signal handlers for graceful shutdown
+    # Build inner Claude command and environment from parsed args.
+    # Engine-owned flags (--model, --mcp-config, etc.) are merged with
+    # passthrough args. Env vars for SDK control protocol are set here
+    # so we don't depend on the full claude-code-sdk package.
+    claude_cmd = build_inner_claude_cmd(args, claude_path)
+    inner_env = build_inner_env(args)
+    inner_cwd = args.cwd or ""
+
+    # Start the inner Claude process (before signal setup so handler can reference it)
+    process = ClaudeProcess()
+    await process.start(claude_cmd, inner_env, inner_cwd)
+
+    # Signal handling — kill inner Claude immediately for fast shutdown
     shutdown_event = asyncio.Event()
 
     def handle_signal(signum: int, frame: object) -> None:
         protocol.log(f"Received signal {signum}, shutting down...")
         shutdown_event.set()
+        # Kill the inner Claude process immediately so the engine exits fast.
+        # Without this, the engine waits for the current turn to finish (~seconds)
+        # before checking shutdown_event, delaying the kill by up to 5s.
+        if process.is_running and process._proc is not None:
+            try:
+                process._proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
+    protocol.log("Inner claude process started")
 
-    # Start protocol handler (stdin reader)
-    await protocol.start()
+    # Set up stdin reader and message router
+    stdin_reader = _StdinReader()
+    await stdin_reader.start()
+    router = _MessageRouter(stdin_reader)
+    await router.start()
 
-    # Build default session options
-    session_opts: dict = {}
-
-    # Create and start the main session
-    session = Session("main", claude_path, session_opts, protocol=protocol)
-    await session.start()
-    protocol.log("Main session started")
+    # Build session for flowchart execution (shares the same inner process)
+    session = Session(
+        "main",
+        claude_cmd,
+        protocol=protocol,
+        control_callback=lambda req: _handle_control_request(
+            req, protocol, router
+        ),
+    )
+    # Attach the already-running process to the session
+    session._process = process
 
     try:
-        # Execute initial command/flowchart if provided on CLI
-        if args.command or args.flowchart:
-            try:
-                if args.command:
-                    command = resolve_command(args.command, args.search_paths)
-                    flowchart = command.flowchart
-                    declared_args = command.arguments
-                    protocol.log(f"Resolved command: {args.command}")
-                else:
-                    flowchart = fc_lib.load(args.flowchart)
-                    declared_args = flowchart.arguments
-                    protocol.log(f"Loaded flowchart: {args.flowchart}")
-            except (CommandNotFoundError, FileNotFoundError, Exception) as e:
-                protocol.emit_result(str(e), is_error=True)
-                return
-
-            # Validate
-            validation = fc_lib.validate(flowchart)
-            if not validation.valid:
-                protocol.emit_result(
-                    f"Flowchart validation failed: {validation.errors}",
-                    is_error=True,
-                )
-                return
-            for warning in validation.warnings:
-                protocol.log(f"Validation warning: {warning}")
-
-            # Build variables from arguments
-            try:
-                variables = build_variables(args.args, args.extra, declared_args)
-            except ValueError as e:
-                protocol.emit_result(str(e), is_error=True)
-                return
-
-            await _run_flowchart(session, flowchart, variables, protocol, args)
-
-        # Message loop — stay alive until shutdown or stdin EOF
-        protocol.log("Entering message loop")
         while not shutdown_event.is_set():
-            try:
-                msg = await protocol.read_message()
-            except asyncio.CancelledError:
+            msg = await router.read_message()
+            if msg is None:
                 break
 
             msg_type = msg.get("type", "")
@@ -132,32 +252,255 @@ async def main() -> None:
                 protocol.log("Shutdown requested")
                 break
 
-            elif msg_type == "user":
-                content = msg.get("message", {}).get("content", "")
-                if content:
-                    await session.query(
-                        content, block_id="", block_name="direct",
+            if msg_type == "user":
+                # Extract propagated trace context (strips _trace_context from msg)
+                parent_ctx = _extract_trace_context(msg)
+                ctx_token = otel_context.attach(parent_ctx) if parent_ctx else None
+
+                try:
+                    content = msg.get("message", {}).get("content", "")
+                    if not content:
+                        continue
+
+                    parsed = _parse_slash_command(content)
+                    if parsed:
+                        cmd_name, cmd_args = parsed
+                        # Try to resolve as a flowchart command
+                        try:
+                            cmd = resolve_command(
+                                cmd_name, args.search_paths
+                            )
+                        except CommandNotFoundError:
+                            # Not a known command — forward to claude as-is
+                            protocol.log(
+                                f"Unknown command /{cmd_name}, proxying to claude"
+                            )
+                            await _proxy_turn(process, protocol, msg, router)
+                            continue
+
+                        # Known command — takeover for flowchart execution
+                        protocol.log(f"Flowchart takeover: /{cmd_name} {cmd_args}")
+                        await _run_flowchart_takeover(
+                            session, cmd, cmd_name, cmd_args, protocol, args,
+                        )
+                    else:
+                        # Normal message — proxy to inner claude
+                        await _proxy_turn(process, protocol, msg, router)
+                finally:
+                    if ctx_token is not None:
+                        otel_context.detach(ctx_token)
+
+            elif msg_type == "control_request":
+                msg.pop("_trace_context", None)  # strip before forwarding
+                subtype = msg.get("request", {}).get("subtype", "")
+                if subtype == "initialize":
+                    # Engine handles initialize directly — inner Claude
+                    # runs in -p mode and doesn't support control protocol
+                    request_id = msg.get("request_id", "")
+                    protocol.emit({
+                        "type": "control_response",
+                        "response": {
+                            "subtype": "success",
+                            "request_id": request_id,
+                            "response": {},
+                        },
+                    })
+                else:
+                    # Forward other control requests to inner Claude
+                    await process.write(msg)
+                    await _forward_until_control_response(
+                        process, protocol
                     )
 
-            elif msg_type == "command":
-                cmd_name = msg.get("name", "")
-                cmd_args = msg.get("args", "")
-                try:
-                    cmd = resolve_command(cmd_name, args.search_paths)
-                    variables = build_variables(
-                        cmd_args, {}, cmd.arguments,
-                    )
-                    await _run_flowchart(
-                        session, cmd.flowchart, variables, protocol, args,
-                    )
-                except (CommandNotFoundError, ValueError) as e:
-                    protocol.emit_result(str(e), is_error=True)
-                except Exception as e:
-                    protocol.emit_result(f"Unexpected error: {e}", is_error=True)
+            else:
+                # Forward any other message types to inner claude
+                msg.pop("_trace_context", None)
+                await process.write(msg)
 
     finally:
-        await session.stop()
-        await protocol.stop()
+        await process.stop()
+        if otel_provider:
+            otel_provider.shutdown()
+        protocol.log("Shutdown complete")
+
+
+
+async def _proxy_turn(
+    process: ClaudeProcess,
+    protocol: ProtocolHandler,
+    user_msg: dict,
+    router: _MessageRouter,
+) -> None:
+    """Forward a user message to inner claude and proxy all output until result.
+
+    Spawns a background drainer that forwards control_responses from the
+    router to inner Claude, preventing deadlocks during MCP init and tool
+    permission requests.
+    """
+    with _tracer.start_as_current_span("proxy_turn"):
+        await process.write(user_msg)
+
+        drainer = asyncio.create_task(
+            _drain_control_responses(process, router)
+        )
+        try:
+            while True:
+                data = await process.read()
+                if data is None:
+                    return
+                protocol.emit(data)
+                if data.get("type") == "result":
+                    return
+        finally:
+            drainer.cancel()
+            try:
+                await drainer
+            except asyncio.CancelledError:
+                pass
+
+
+async def _drain_control_responses(
+    process: ClaudeProcess,
+    router: _MessageRouter,
+) -> None:
+    """Forward control_responses from the router to inner Claude until cancelled.
+
+    Runs as a background task during proxy turns.  The router has already
+    classified the message, so we just read and forward.
+    """
+    while True:
+        msg = await router.read_control_response()
+        if msg is None:
+            return
+        await process.write(msg)
+
+
+async def _forward_until_control_response(
+    process: ClaudeProcess,
+    protocol: ProtocolHandler,
+) -> None:
+    """Forward inner Claude output until a control_response appears.
+
+    Used when the outer client sends a control_request (e.g. set_model)
+    to inner Claude.  Control_responses from stdin are handled by the
+    router's background drainer, so we only need to read stdout here.
+    """
+    while True:
+        data = await process.read()
+        if data is None:
+            return
+        protocol.emit(data)
+        if data.get("type") == "control_response":
+            return
+
+
+async def _run_flowchart_takeover(
+    session: Session,
+    cmd: fc_lib.Command,
+    cmd_name: str,
+    cmd_args: str,
+    protocol: ProtocolHandler,
+    args: object,
+) -> None:
+    """Execute a flowchart command in takeover mode."""
+    block_count = len(cmd.flowchart.blocks)
+    with _tracer.start_as_current_span(
+        "flowchart.takeover",
+        attributes={"command.name": cmd_name, "command.args": cmd_args, "flowchart.block_count": block_count},
+    ) as span:
+        start_time = time.monotonic()
+
+        # Validate flowchart
+        validation = fc_lib.validate(cmd.flowchart)
+        if not validation.valid:
+            protocol.emit_result(
+                f"Flowchart validation failed: {validation.errors}",
+                is_error=True,
+            )
+            span.set_status(trace.StatusCode.ERROR, "validation failed")
+            return
+
+        # Build variables
+        try:
+            variables = build_variables(cmd_args, cmd.arguments)
+        except ValueError as e:
+            protocol.emit_result(str(e), is_error=True)
+            span.set_status(trace.StatusCode.ERROR, str(e))
+            return
+
+        protocol.emit_flowchart_start(cmd_name, cmd_args, block_count)
+
+        walker = GraphWalker(
+            cmd.flowchart,
+            session,
+            variables,
+            protocol,
+            max_blocks=args.max_blocks,
+            search_paths=args.search_paths or [],
+        )
+
+        try:
+            result = await walker.run()
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+
+            protocol.emit_flowchart_complete(
+                status=result.status,
+                duration_ms=duration_ms,
+                cost_usd=session.total_cost,
+                blocks_executed=len(result.log),
+            )
+
+            protocol.emit_result(
+                json.dumps(result.variables),
+                is_error=result.status != "completed",
+                duration_ms=duration_ms,
+                num_turns=len(result.log),
+                total_cost_usd=session.total_cost,
+            )
+            span.set_attributes({"flowchart.status": result.status, "flowchart.duration_ms": duration_ms})
+
+        except ExecutionError as e:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            protocol.emit_flowchart_complete(
+                status="error", duration_ms=duration_ms
+            )
+            protocol.emit_result(str(e), is_error=True)
+            span.set_status(trace.StatusCode.ERROR, str(e))
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            protocol.emit_flowchart_complete(
+                status="error", duration_ms=duration_ms
+            )
+            protocol.emit_result(f"Unexpected error: {e}", is_error=True)
+            span.set_status(trace.StatusCode.ERROR, str(e))
+
+
+async def _handle_control_request(
+    request: dict,
+    protocol: ProtocolHandler,
+    router: _MessageRouter,
+) -> dict:
+    """Relay a control request from inner claude to the client.
+
+    Emits the request on stdout, waits for a control_response from the
+    router's control_response queue.
+    """
+    protocol.emit(request)
+
+    # Wait for the matching control_response from the client
+    request_id = request.get("request_id", "")
+    response = await router.read_control_response()
+    if response is None:
+        # Client disconnected — deny
+        return {
+            "type": "control_response",
+            "response": {
+                "request_id": request_id,
+                "allowed": False,
+            },
+        }
+    return response
 
 
 def main_sync() -> None:

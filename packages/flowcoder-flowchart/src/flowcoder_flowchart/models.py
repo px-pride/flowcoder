@@ -1,10 +1,6 @@
 """Core models for flowchart workflows.
 
-Defines Connection, Argument, SessionConfig, Flowchart, and helper models.
-
-Extended with:
-- VariableEntry: for tracking variable state across execution
-- WaitEntry: for tracking spawned session wait results
+Defines Connection, Argument, SessionConfig, and Flowchart.
 """
 
 from __future__ import annotations
@@ -14,7 +10,7 @@ from uuid import uuid4
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
-from .blocks import Block
+from .blocks import Block  # noqa: TC001
 
 
 class Connection(BaseModel):
@@ -70,21 +66,3 @@ class Flowchart(BaseModel):
             if block.id != key:
                 block.id = key
         return self
-
-
-# ── Helper models for execution tracking ────────────────────────────
-
-
-class VariableEntry(BaseModel):
-    """Tracks a variable's value and which block set it."""
-    name: str
-    value: Any = None
-    set_by_block_id: str | None = None
-
-
-class WaitEntry(BaseModel):
-    """Tracks results from a spawned session wait."""
-    agent_name: str
-    exit_code: int = 0
-    output: str = ""
-    completed: bool = False

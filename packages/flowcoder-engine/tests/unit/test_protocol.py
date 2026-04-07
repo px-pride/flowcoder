@@ -1,101 +1,70 @@
-"""Tests for ProtocolHandler --- specifically the status_request feature."""
+"""Tests for ProtocolHandler output methods."""
 
 from __future__ import annotations
 
-import asyncio
 import io
 import json
 import sys
 from unittest.mock import patch
 
-import pytest
-
 from flowcoder_engine.protocol import ProtocolHandler
 
 
-class TestStatusRequest:
-    """Tests for the status_request / status_response mechanism."""
-
-    def test_busy_defaults_to_false(self):
-        """New ProtocolHandler has busy=False."""
+class TestEmit:
+    def test_emit_writes_json_line(self):
         p = ProtocolHandler()
-        assert p.busy is False
-
-    def test_busy_can_be_set(self):
-        p = ProtocolHandler()
-        p.busy = True
-        assert p.busy is True
-        p.busy = False
-        assert p.busy is False
-
-    @pytest.mark.asyncio
-    async def test_status_request_emits_response(self):
-        """_read_loop handles status_request by emitting status_response on stdout."""
-        p = ProtocolHandler()
-
-        # Feed a status_request message into a fake stdin
-        msg = json.dumps({"type": "status_request"}) + "\n"
-        fake_stdin = asyncio.StreamReader()
-        fake_stdin.feed_data(msg.encode())
-        fake_stdin.feed_eof()
-        p._stdin_reader = fake_stdin
-
-        # Capture stdout
         captured = io.StringIO()
         with patch.object(sys, "stdout", captured):
-            await p._read_loop()
+            p.emit({"type": "test", "data": 42})
+        line = captured.getvalue().strip()
+        assert json.loads(line) == {"type": "test", "data": 42}
 
-        # Parse the emitted response
-        output = captured.getvalue().strip()
-        assert output, "No output emitted"
-        response = json.loads(output)
-        assert response["type"] == "status_response"
-        assert response["busy"] is False
-
-    @pytest.mark.asyncio
-    async def test_status_request_reflects_busy_state(self):
-        """status_response reflects current busy flag."""
+    def test_emit_system(self):
         p = ProtocolHandler()
-        p.busy = True
-
-        msg = json.dumps({"type": "status_request"}) + "\n"
-        fake_stdin = asyncio.StreamReader()
-        fake_stdin.feed_data(msg.encode())
-        fake_stdin.feed_eof()
-        p._stdin_reader = fake_stdin
-
         captured = io.StringIO()
         with patch.object(sys, "stdout", captured):
-            await p._read_loop()
+            p.emit_system("block_start", {"block_id": "b1"})
+        msg = json.loads(captured.getvalue().strip())
+        assert msg["type"] == "system"
+        assert msg["subtype"] == "block_start"
+        assert msg["data"]["block_id"] == "b1"
 
-        response = json.loads(captured.getvalue().strip())
-        assert response["type"] == "status_response"
-        assert response["busy"] is True
-
-    @pytest.mark.asyncio
-    async def test_status_request_not_queued_to_inbox(self):
-        """status_request is handled in _read_loop, not put in inbox."""
+    def test_emit_flowchart_start(self):
         p = ProtocolHandler()
-
-        # Feed status_request + a normal message + EOF
-        lines = (
-            json.dumps({"type": "status_request"}) + "\n"
-            + json.dumps({"type": "user", "message": {"content": "hi"}}) + "\n"
-        )
-        fake_stdin = asyncio.StreamReader()
-        fake_stdin.feed_data(lines.encode())
-        fake_stdin.feed_eof()
-        p._stdin_reader = fake_stdin
-
         captured = io.StringIO()
         with patch.object(sys, "stdout", captured):
-            await p._read_loop()
+            p.emit_flowchart_start("story", "dragons", 5)
+        msg = json.loads(captured.getvalue().strip())
+        assert msg["type"] == "system"
+        assert msg["subtype"] == "flowchart_start"
+        assert msg["data"]["command"] == "story"
+        assert msg["data"]["block_count"] == 5
 
-        # Only the user message should be in inbox
-        assert p._inbox.qsize() == 1
-        msg = p._inbox.get_nowait()
-        assert msg["type"] == "user"
+    def test_emit_flowchart_complete(self):
+        p = ProtocolHandler()
+        captured = io.StringIO()
+        with patch.object(sys, "stdout", captured):
+            p.emit_flowchart_complete("completed", duration_ms=1000, cost_usd=0.05, blocks_executed=3)
+        msg = json.loads(captured.getvalue().strip())
+        assert msg["subtype"] == "flowchart_complete"
+        assert msg["data"]["status"] == "completed"
 
-        # status_response was emitted to stdout
-        response = json.loads(captured.getvalue().strip())
-        assert response["type"] == "status_response"
+    def test_emit_forwarded_unwrapped(self):
+        """emit_forwarded emits the inner message as-is (no wrapping)."""
+        p = ProtocolHandler()
+        inner = {"type": "assistant", "message": {"content": "hello"}}
+        captured = io.StringIO()
+        with patch.object(sys, "stdout", captured):
+            p.emit_forwarded(inner, "main", "b1", "Block1")
+        msg = json.loads(captured.getvalue().strip())
+        assert msg == inner
+
+    def test_emit_result(self):
+        p = ProtocolHandler()
+        captured = io.StringIO()
+        with patch.object(sys, "stdout", captured):
+            p.emit_result("done", is_error=False, duration_ms=500)
+        msg = json.loads(captured.getvalue().strip())
+        assert msg["type"] == "result"
+        assert msg["result"] == "done"
+        assert msg["is_error"] is False

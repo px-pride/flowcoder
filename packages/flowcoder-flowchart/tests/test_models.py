@@ -1,7 +1,6 @@
 """Tests for core models: Connection, Argument, SessionConfig, Flowchart."""
 
 import pytest
-
 from flowcoder_flowchart import (
     Argument,
     Connection,

@@ -5,7 +5,6 @@ Pydantic handles serialization — these are thin wrappers for file operations.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 

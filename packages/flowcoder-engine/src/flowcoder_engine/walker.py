@@ -1,11 +1,4 @@
-"""Graph walker — executes a flowchart by walking blocks.
-
-Extended from leroux's flow-mono with:
-- SpawnBlock, WaitBlock, ExitBlock handlers
-- Halt/resume mechanism (_halt_requested flag)
-- Git callback hooks (on_block_complete, on_git_tag)
-- Spawned session tracking
-"""
+"""Graph walker — executes a flowchart by walking blocks."""
 
 from __future__ import annotations
 
@@ -16,37 +9,35 @@ import re
 import shlex
 import time
 from asyncio.subprocess import PIPE
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from flowcoder_flowchart import (
     BashBlock,
-    Block,
     BlockBase,
     BlockType,
     BranchBlock,
     CommandBlock,
-    EndBlock,
-    ExitBlock,
     Flowchart,
-    InputBlock,
     PromptBlock,
     RefreshBlock,
-    SpawnBlock,
-    StartBlock,
     VariableBlock,
     VariableType,
-    WaitBlock,
 )
+from opentelemetry import trace
 
 from .json_parser import parse_json_from_response
-from .protocol import ProtocolHandler
 from .resolver import CommandNotFoundError, resolve_command
-from .session import Session
-from .templates import _is_truthy, evaluate_template
+from .templates import evaluate_template
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from .protocol import ProtocolHandler
+    from .session import Session
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 SOFT_TIMEOUT_SECONDS = 300  # 5 minutes — log warning, don't kill
 MAX_RECURSION_DEPTH = 10
@@ -62,7 +53,6 @@ class BlockResult:
     output: str = ""
     error: str = ""
     branch_taken: bool | None = None
-    exit_code: int | None = None  # Set by ExitBlock
 
     @classmethod
     def ok(cls, output: str = "", branch_taken: bool | None = None) -> BlockResult:
@@ -71,10 +61,6 @@ class BlockResult:
     @classmethod
     def fail(cls, error: str) -> BlockResult:
         return cls(success=False, error=error)
-
-    @classmethod
-    def exit(cls, code: int = 0, message: str = "") -> BlockResult:
-        return cls(success=True, output=message, exit_code=code)
 
 
 @dataclass
@@ -90,14 +76,21 @@ class LogEntry:
 class ExecutionResult:
     variables: dict[str, Any]
     log: list[LogEntry]
-    status: str  # "completed" | "halted" | "error" | "exited"
-    exit_code: int = 0
+    status: str  # "completed" | "halted" | "error"
     duration_ms: int = 0
 
 
 _COMPARISON_RE = re.compile(
     r"^\s*(.+?)\s+(==|!=|>=|<=|>|<)\s+(.+?)\s*$"
 )
+
+
+def _is_truthy(value: Any) -> bool:
+    """Test truthiness the same way Pride does."""
+    if value is None:
+        return False
+    s = str(value).lower().strip()
+    return bool(value) and s not in ("false", "0", "no", "")
 
 
 def _coerce_numeric(s: str) -> float | str:
@@ -115,6 +108,9 @@ def _evaluate_condition(condition: str, variables: dict[str, Any]) -> bool:
     - Simple variable truthiness: ``fullyImplemented``
     - Negation: ``!hasErrors``
     - Comparison: ``exitCode == 0``, ``count > 5``, ``status != "done"``
+
+    Template substitution (``{{var}}``, ``$N``) should be done *before*
+    calling this function so that comparison values are already resolved.
     """
     cond = condition.strip()
 
@@ -127,12 +123,18 @@ def _evaluate_condition(condition: str, variables: dict[str, Any]) -> bool:
     m = _COMPARISON_RE.match(cond)
     if m:
         lhs_raw, op, rhs_raw = m.group(1), m.group(2), m.group(3)
+
+        # Strip surrounding quotes from RHS if present
         rhs_str = rhs_raw.strip("\"'")
+
+        # Resolve LHS from variables (could be a variable name or literal)
         lhs_val = variables.get(lhs_raw, lhs_raw)
 
+        # Coerce both sides for numeric comparison
         lhs_num = _coerce_numeric(str(lhs_val))
         rhs_num = _coerce_numeric(rhs_str)
 
+        # If both are numbers, compare numerically
         if isinstance(lhs_num, float) and isinstance(rhs_num, float):
             match op:
                 case "==": return lhs_num == rhs_num
@@ -142,6 +144,7 @@ def _evaluate_condition(condition: str, variables: dict[str, Any]) -> bool:
                 case ">=": return lhs_num >= rhs_num
                 case "<=": return lhs_num <= rhs_num
 
+        # String comparison fallback
         lhs_s = str(lhs_val)
         match op:
             case "==": return lhs_s == rhs_str
@@ -153,10 +156,6 @@ def _evaluate_condition(condition: str, variables: dict[str, Any]) -> bool:
 
     # Simple variable lookup (original behavior)
     return _is_truthy(variables.get(cond))
-
-
-# Type alias for git callback hooks
-GitCallback = Callable[[str, str, dict[str, Any]], None] | None
 
 
 class GraphWalker:
@@ -172,9 +171,6 @@ class GraphWalker:
         call_stack: list[str] | None = None,
         max_depth: int = MAX_RECURSION_DEPTH,
         search_paths: list[str | Path] | None = None,
-        # Callback hooks
-        on_block_complete: GitCallback = None,
-        on_git_tag: GitCallback = None,
     ) -> None:
         self._flowchart = flowchart
         self._session = session
@@ -182,199 +178,146 @@ class GraphWalker:
         self._protocol = protocol
         self._log: list[LogEntry] = []
         self._halted = False
-        self._halt_requested = False
         self._blocks_executed = 0
         self._max_blocks = max_blocks
         self._call_stack = call_stack or []
         self._max_depth = max_depth
         self._search_paths = search_paths or []
-        # Spawned sessions tracking
-        self._spawned_sessions: dict[str, Session] = {}
-        self._spawned_tasks: dict[str, asyncio.Task] = {}
-        self._spawned_results: dict[str, ExecutionResult] = {}
-        # Git callbacks
-        self._on_block_complete = on_block_complete
-        self._on_git_tag = on_git_tag
-
-    def halt(self) -> None:
-        """Request the walker to halt after the current block."""
-        self._halt_requested = True
-
-    def resume(self) -> None:
-        """Clear the halt flag so execution can continue."""
-        self._halt_requested = False
-        self._halted = False
 
     async def run(self) -> ExecutionResult:
         """Execute the flowchart from start to end."""
-        start_time = time.monotonic()
-        current = self._find_start_block()
-        exit_code = 0
+        with _tracer.start_as_current_span(
+            "flowchart.run",
+            attributes={
+                "flowchart.name": self._flowchart.name,
+                "flowchart.block_count": len(self._flowchart.blocks),
+            },
+        ) as run_span:
+            start_time = time.monotonic()
+            current = self._find_start_block()
 
-        while current and not self._halted:
-            # Check halt request
-            if self._halt_requested:
-                self._halted = True
-                break
+            while current and not self._halted:
+                if self._blocks_executed >= self._max_blocks:
+                    raise ExecutionError(
+                        f"Safety limit: exceeded {self._max_blocks} blocks"
+                    )
 
-            if self._blocks_executed >= self._max_blocks:
-                raise ExecutionError(
-                    f"Safety limit: exceeded {self._max_blocks} blocks"
+                self._blocks_executed += 1
+                self._protocol.emit_block_start(
+                    current.id, current.name, current.type
                 )
-
-            self._blocks_executed += 1
-            self._protocol.emit_block_start(
-                current.id, current.name, current.type
-            )
-            self._protocol.log(
-                f"Executing block \"{current.name}\" "
-                f"({current.type}, session={current.session})"
-            )
-
-            block_start = time.monotonic()
-            result = await self._execute_block(current)
-            block_ms = int((time.monotonic() - block_start) * 1000)
-
-            # Soft timeout warning
-            if block_ms > SOFT_TIMEOUT_SECONDS * 1000:
                 self._protocol.log(
-                    f"WARNING: Block \"{current.name}\" took {block_ms}ms "
-                    f"(>{SOFT_TIMEOUT_SECONDS}s soft timeout)"
+                    f"Executing block \"{current.name}\" "
+                    f"({current.type}, session={current.session})"
                 )
 
-            entry = LogEntry(
-                block_id=current.id,
-                block_name=current.name,
-                block_type=current.type,
-                result=result,
-                duration_ms=block_ms,
+                block_start = time.monotonic()
+                result = await self._execute_block(current)
+                block_ms = int((time.monotonic() - block_start) * 1000)
+
+                # Soft timeout warning
+                if block_ms > SOFT_TIMEOUT_SECONDS * 1000:
+                    self._protocol.log(
+                        f"WARNING: Block \"{current.name}\" took {block_ms}ms "
+                        f"(>{SOFT_TIMEOUT_SECONDS}s soft timeout)"
+                    )
+
+                entry = LogEntry(
+                    block_id=current.id,
+                    block_name=current.name,
+                    block_type=current.type,
+                    result=result,
+                    duration_ms=block_ms,
+                )
+                self._log.append(entry)
+
+                self._protocol.emit_block_complete(
+                    current.id, current.name, result.success
+                )
+
+                if not result.success:
+                    self._halted = True
+                    break
+
+                current = self._next_block(current, result)
+
+            total_ms = int((time.monotonic() - start_time) * 1000)
+            status = "completed" if not self._halted else "halted"
+            run_span.set_attributes({"flowchart.status": status, "flowchart.duration_ms": total_ms})
+            return ExecutionResult(
+                variables=self._variables,
+                log=self._log,
+                status=status,
+                duration_ms=total_ms,
             )
-            self._log.append(entry)
-
-            self._protocol.emit_block_complete(
-                current.id, current.name, result.success
-            )
-
-            # Post-block git callback
-            if result.success and self._on_block_complete:
-                self._on_block_complete(current.id, current.name, {
-                    "block_type": current.type,
-                    "variables": dict(self._variables),
-                })
-
-            # Git tag callback
-            git_tag = getattr(current, 'git_tag', None)
-            if git_tag and result.success and self._on_git_tag:
-                tag_text = evaluate_template(git_tag, self._variables)
-                self._on_git_tag(current.id, tag_text, {
-                    "block_name": current.name,
-                })
-
-            # Check for exit block
-            if result.exit_code is not None:
-                exit_code = result.exit_code
-                break
-
-            if not result.success:
-                self._halted = True
-                break
-
-            current = self._next_block(current, result)
-
-        total_ms = int((time.monotonic() - start_time) * 1000)
-
-        if exit_code != 0:
-            status = "exited"
-        elif self._halted:
-            status = "halted"
-        else:
-            status = "completed"
-
-        # Clean up spawned sessions
-        await self._cleanup_spawned()
-
-        return ExecutionResult(
-            variables=self._variables,
-            log=self._log,
-            status=status,
-            exit_code=exit_code,
-            duration_ms=total_ms,
-        )
 
     async def _execute_block(self, block: BlockBase) -> BlockResult:
         """Dispatch to the appropriate handler based on block type."""
-        match block.type:
-            case BlockType.START:
-                return BlockResult.ok()
-            case BlockType.END:
-                return BlockResult.ok()
-            case BlockType.PROMPT:
-                assert isinstance(block, PromptBlock)
-                return await self._exec_prompt(block)
-            case BlockType.BRANCH:
-                assert isinstance(block, BranchBlock)
-                return self._exec_branch(block)
-            case BlockType.VARIABLE:
-                assert isinstance(block, VariableBlock)
-                return self._exec_variable(block)
-            case BlockType.BASH:
-                assert isinstance(block, BashBlock)
-                return await self._exec_bash(block)
-            case BlockType.COMMAND:
-                assert isinstance(block, CommandBlock)
-                return await self._exec_command(block)
-            case BlockType.REFRESH:
-                assert isinstance(block, RefreshBlock)
-                return await self._exec_refresh(block)
-            case BlockType.SPAWN:
-                assert isinstance(block, SpawnBlock)
-                return await self._exec_spawn(block)
-            case BlockType.WAIT:
-                assert isinstance(block, WaitBlock)
-                return await self._exec_wait(block)
-            case BlockType.EXIT:
-                assert isinstance(block, ExitBlock)
-                return self._exec_exit(block)
-            case BlockType.INPUT:
-                assert isinstance(block, InputBlock)
-                return await self._exec_input(block)
-            case _:
-                return BlockResult.fail(f"Unknown block type: {block.type}")
+        with _tracer.start_as_current_span(
+            "flowchart.block",
+            attributes={"block.id": block.id, "block.name": block.name, "block.type": block.type},
+        ):
+            match block.type:
+                case BlockType.START:
+                    return BlockResult.ok()
+                case BlockType.END:
+                    return BlockResult.ok()
+                case BlockType.PROMPT:
+                    assert isinstance(block, PromptBlock)
+                    return await self._exec_prompt(block)
+                case BlockType.BRANCH:
+                    assert isinstance(block, BranchBlock)
+                    return self._exec_branch(block)
+                case BlockType.VARIABLE:
+                    assert isinstance(block, VariableBlock)
+                    return self._exec_variable(block)
+                case BlockType.BASH:
+                    assert isinstance(block, BashBlock)
+                    return await self._exec_bash(block)
+                case BlockType.COMMAND:
+                    assert isinstance(block, CommandBlock)
+                    return await self._exec_command(block)
+                case BlockType.REFRESH:
+                    assert isinstance(block, RefreshBlock)
+                    return await self._exec_refresh(block)
+                case _:
+                    return BlockResult.fail(f"Unknown block type: {block.type}")
 
     async def _exec_prompt(self, block: PromptBlock) -> BlockResult:
         """Execute a prompt block: resolve template, send to session, collect response."""
-        prompt_text = evaluate_template(block.prompt, self._variables)
+        with _tracer.start_as_current_span("flowchart.exec_prompt", attributes={"block.name": block.name}):
+            prompt_text = evaluate_template(block.prompt, self._variables)
 
-        if block.session != "default":
-            self._protocol.log(
-                f"WARNING: Multi-session not yet supported, "
-                f"block \"{block.name}\" requests session \"{block.session}\" "
-                f"— using main session"
+            if block.session != "default":
+                self._protocol.log(
+                    f"WARNING: Multi-session not yet supported, "
+                    f"block \"{block.name}\" requests session \"{block.session}\" "
+                    f"— using main session"
+                )
+
+            # Append output schema instructions if specified
+            if block.output_schema:
+                schema_str = json.dumps(block.output_schema, indent=2)
+                prompt_text += (
+                    f"\n\nRespond with JSON matching this schema:\n"
+                    f"```json\n{schema_str}\n```"
+                )
+
+            result = await self._session.query(
+                prompt_text, block_id=block.id, block_name=block.name
             )
 
-        # Append output schema instructions if specified
-        if block.output_schema:
-            schema_str = json.dumps(block.output_schema, indent=2)
-            prompt_text += (
-                f"\n\nRespond with JSON matching this schema:\n"
-                f"```json\n{schema_str}\n```"
-            )
+            # Save raw output to variable if requested
+            if block.output_variable and result.response_text:
+                self._variables[block.output_variable] = result.response_text
 
-        result = await self._session.query(
-            prompt_text, block_id=block.id, block_name=block.name
-        )
+            # Parse structured output
+            if block.output_schema and result.response_text:
+                parsed = parse_json_from_response(result.response_text)
+                if parsed:
+                    self._variables.update(parsed)
 
-        # Save raw output to variable if requested
-        if block.output_variable and result.response_text:
-            self._variables[block.output_variable] = result.response_text
-
-        # Parse structured output
-        if block.output_schema and result.response_text:
-            parsed = parse_json_from_response(result.response_text)
-            if parsed:
-                self._variables.update(parsed)
-
-        return BlockResult.ok(output=result.response_text)
+            return BlockResult.ok(output=result.response_text)
 
     def _exec_branch(self, block: BranchBlock) -> BlockResult:
         """Evaluate a branch condition against variables.
@@ -382,9 +325,10 @@ class GraphWalker:
         Supports:
         - Simple variable truthiness: ``fullyImplemented``
         - Negation: ``!hasErrors``
-        - Comparison operators: ``exitCode == 0``, ``i < 3``
+        - Comparison operators: ``exitCode == 0``, ``i < 3``, ``status != "done"``
         - Template refs in conditions: ``i < {{max}}``
         """
+        # Resolve any {{var}} / $N templates in the condition text first
         condition = evaluate_template(block.condition, self._variables)
         truthy = _evaluate_condition(condition, self._variables)
         self._protocol.log(
@@ -419,52 +363,59 @@ class GraphWalker:
     async def _exec_bash(self, block: BashBlock) -> BlockResult:
         """Execute a shell command."""
         cmd = evaluate_template(block.command, self._variables)
-        cwd = block.working_directory or None
+        with _tracer.start_as_current_span(
+            "flowchart.exec_bash",
+            attributes={"block.name": block.name, "bash.command": cmd[:200]},
+        ) as span:
+            cwd = block.working_directory or None
 
-        try:
-            proc = await asyncio.create_subprocess_shell(
-                cmd, stdout=PIPE, stderr=PIPE, cwd=cwd
-            )
-            stdout, stderr = await proc.communicate()
-        except Exception as e:
-            return BlockResult.fail(f"Failed to run command: {e}")
-
-        exit_code = proc.returncode or 0
-        stdout_str = stdout.decode() if stdout else ""
-        stderr_str = stderr.decode() if stderr else ""
-
-        # Store exit code variable
-        if block.exit_code_variable:
-            self._variables[block.exit_code_variable] = exit_code
-
-        # Check exit code
-        if exit_code != 0 and not block.continue_on_error:
-            return BlockResult.fail(
-                f"Exit code {exit_code}: {stderr_str or stdout_str}"
-            )
-
-        # Capture output
-        if block.capture_output and block.output_variable:
-            output = stdout_str.strip()
             try:
-                match block.output_type:
-                    case VariableType.NUMBER:
-                        self._variables[block.output_variable] = float(output)
-                    case VariableType.BOOLEAN:
-                        self._variables[block.output_variable] = output.lower() in (
-                            "true", "1", "yes",
-                        )
-                    case VariableType.JSON:
-                        self._variables[block.output_variable] = json.loads(output)
-                    case _:
-                        self._variables[block.output_variable] = output
-            except (ValueError, json.JSONDecodeError):
-                self._variables[block.output_variable] = output
+                proc = await asyncio.create_subprocess_shell(
+                    cmd, stdout=PIPE, stderr=PIPE, cwd=cwd
+                )
+                stdout, stderr = await proc.communicate()
+            except Exception as e:
+                span.set_status(trace.StatusCode.ERROR, str(e))
+                return BlockResult.fail(f"Failed to run command: {e}")
 
-        return BlockResult.ok(output=stdout_str)
+            exit_code = proc.returncode or 0
+            stdout_str = stdout.decode() if stdout else ""
+            stderr_str = stderr.decode() if stderr else ""
+            span.set_attribute("bash.exit_code", exit_code)
+
+            # Store exit code variable
+            if block.exit_code_variable:
+                self._variables[block.exit_code_variable] = exit_code
+
+            # Check exit code
+            if exit_code != 0 and not block.continue_on_error:
+                return BlockResult.fail(
+                    f"Exit code {exit_code}: {stderr_str or stdout_str}"
+                )
+
+            # Capture output
+            if block.capture_output and block.output_variable:
+                output = stdout_str.strip()
+                try:
+                    match block.output_type:
+                        case VariableType.NUMBER:
+                            self._variables[block.output_variable] = float(output)
+                        case VariableType.BOOLEAN:
+                            self._variables[block.output_variable] = output.lower() in (
+                                "true", "1", "yes",
+                            )
+                        case VariableType.JSON:
+                            self._variables[block.output_variable] = json.loads(output)
+                        case _:
+                            self._variables[block.output_variable] = output
+                except (ValueError, json.JSONDecodeError):
+                    self._variables[block.output_variable] = output
+
+            return BlockResult.ok(output=stdout_str)
 
     async def _exec_refresh(self, block: RefreshBlock) -> BlockResult:
         """Clear conversation history by restarting the session."""
+        _tracer.start_span("flowchart.exec_refresh", attributes={"block.name": block.name}).end()
         await self._session.clear()
         self._protocol.log("Session cleared (conversation history reset)")
         return BlockResult.ok()
@@ -476,278 +427,86 @@ class GraphWalker:
         variables, and runs it. Recursion is tracked via the call stack.
         """
         depth = len(self._call_stack)
-        if depth >= self._max_depth:
-            return BlockResult.fail(
-                f"Max recursion depth ({self._max_depth}) exceeded. "
-                f"Call stack: {' -> '.join(self._call_stack)}"
-            )
-
-        # Check for direct recursion (same command already in stack)
-        if block.command_name in self._call_stack:
-            self._protocol.log(
-                f"WARNING: Recursive call to '{block.command_name}' "
-                f"(depth {depth}). Stack: {' -> '.join(self._call_stack)}"
-            )
-
-        # Resolve the command
-        try:
-            cmd = resolve_command(block.command_name, search_paths=self._search_paths)
-        except CommandNotFoundError as e:
-            return BlockResult.fail(str(e))
-
-        # Build child variables
-        child_vars: dict[str, Any] = {}
-        if block.inherit_variables:
-            child_vars = dict(self._variables)
-
-        # Parse arguments and map to $1, $2, etc.
-        if block.arguments:
-            arg_text = evaluate_template(block.arguments, self._variables)
-            try:
-                parts = shlex.split(arg_text)
-            except ValueError:
-                parts = arg_text.split()
-            for i, part in enumerate(parts, 1):
-                child_vars[f"${i}"] = part
-
-        self._protocol.log(
-            f"Entering sub-command '{block.command_name}' (depth {depth + 1})"
-        )
-
-        # Propagate git callbacks, optionally suppressing auto-git
-        child_on_block_complete = self._on_block_complete
-        if block.suppress_child_auto_git:
-            child_on_block_complete = None
-
-        # Create child walker sharing the same session and protocol
-        child_walker = GraphWalker(
-            cmd.flowchart,
-            self._session,
-            child_vars,
-            self._protocol,
-            max_blocks=self._max_blocks,
-            call_stack=self._call_stack + [block.command_name],
-            max_depth=self._max_depth,
-            search_paths=self._search_paths,
-            on_block_complete=child_on_block_complete,
-            on_git_tag=self._on_git_tag,
-        )
-
-        child_result = await child_walker.run()
-
-        self._protocol.log(
-            f"Sub-command '{block.command_name}' finished: {child_result.status}"
-        )
-
-        # Store exit code if requested
-        if block.exit_code_variable:
-            self._variables[block.exit_code_variable] = child_result.exit_code
-
-        if child_result.status not in ("completed", "exited"):
-            child_errors = [
-                e.result.error for e in child_result.log if e.result.error
-            ]
-            detail = child_errors[-1] if child_errors else child_result.status
-            return BlockResult.fail(
-                f"Sub-command '{block.command_name}' failed: {detail}"
-            )
-
-        # Merge output variables back into parent scope
-        if block.merge_output:
-            for k, v in child_result.variables.items():
-                if not k.startswith("$"):
-                    self._variables[k] = v
-
-        return BlockResult.ok(output=json.dumps(child_result.variables))
-
-    async def _exec_spawn(self, block: SpawnBlock) -> BlockResult:
-        """Spawn a named agent sub-session running a command asynchronously.
-
-        The spawned session runs in the background as an asyncio task.
-        Use WaitBlock to wait for it to complete.
-        """
-        agent_name = evaluate_template(block.agent_name, self._variables)
-
-        if agent_name in self._spawned_sessions:
-            return BlockResult.fail(
-                f"Agent '{agent_name}' is already spawned. "
-                f"Wait for it before spawning again."
-            )
-
-        # Resolve the command to run
-        try:
-            cmd = resolve_command(block.command_name, search_paths=self._search_paths)
-        except CommandNotFoundError as e:
-            return BlockResult.fail(str(e))
-
-        # Build child variables
-        child_vars: dict[str, Any] = {}
-        if block.inherit_variables:
-            child_vars = dict(self._variables)
-
-        if block.arguments:
-            arg_text = evaluate_template(block.arguments, self._variables)
-            try:
-                parts = shlex.split(arg_text)
-            except ValueError:
-                parts = arg_text.split()
-            for i, part in enumerate(parts, 1):
-                child_vars[f"${i}"] = part
-
-        # Determine which session the child walker uses.
-        # If a model is specified, create a dedicated session for this agent.
-        child_session = self._session
-        if block.model:
-            self._protocol.log(
-                f"Spawning agent '{agent_name}' with model '{block.model}' "
-                f"running command '{block.command_name}'"
-            )
-            child_session = Session(
-                name=agent_name,
-                claude_path=self._session._claude_path,
-                opts={**self._session._opts, "model": block.model},
-                protocol=self._protocol,
-            )
-            await child_session.start()
-        else:
-            self._protocol.log(
-                f"Spawning agent '{agent_name}' running command '{block.command_name}'"
-            )
-
-        child_walker = GraphWalker(
-            cmd.flowchart,
-            child_session,
-            child_vars,
-            self._protocol,
-            max_blocks=self._max_blocks,
-            call_stack=self._call_stack + [f"spawn:{block.command_name}"],
-            max_depth=self._max_depth,
-            search_paths=self._search_paths,
-        )
-
-        # Run in background
-        task = asyncio.create_task(child_walker.run())
-        self._spawned_tasks[agent_name] = task
-        self._spawned_sessions[agent_name] = child_session
-
-        return BlockResult.ok(output=f"Spawned agent '{agent_name}'")
-
-    async def _exec_wait(self, block: WaitBlock) -> BlockResult:
-        """Wait for spawned agent sessions to complete."""
-        wait_for = block.wait_for if block.wait_for else list(self._spawned_tasks.keys())
-
-        if not wait_for:
-            self._protocol.log("Wait block: no spawned agents to wait for")
-            return BlockResult.ok()
-
-        errors: list[str] = []
-        for agent_name in wait_for:
-            task = self._spawned_tasks.get(agent_name)
-            if not task:
-                errors.append(f"No spawned agent named '{agent_name}'")
-                continue
-
-            try:
-                if block.timeout_seconds:
-                    result = await asyncio.wait_for(
-                        task, timeout=block.timeout_seconds
-                    )
-                else:
-                    result = await task
-            except asyncio.TimeoutError:
-                errors.append(
-                    f"Agent '{agent_name}' timed out after {block.timeout_seconds}s"
+        with _tracer.start_as_current_span(
+            "flowchart.exec_command",
+            attributes={"command.name": block.command_name, "command.depth": depth},
+        ) as span:
+            if depth >= self._max_depth:
+                return BlockResult.fail(
+                    f"Max recursion depth ({self._max_depth}) exceeded. "
+                    f"Call stack: {' -> '.join(self._call_stack)}"
                 )
-                task.cancel()
-                continue
-            except Exception as e:
-                errors.append(f"Agent '{agent_name}' failed: {e}")
-                continue
 
-            self._spawned_results[agent_name] = result
+            # Check for direct recursion (same command already in stack)
+            if block.command_name in self._call_stack:
+                self._protocol.log(
+                    f"WARNING: Recursive call to '{block.command_name}' "
+                    f"(depth {depth}). Stack: {' -> '.join(self._call_stack)}"
+                )
+
+            # Resolve the command
+            try:
+                cmd = resolve_command(block.command_name, search_paths=self._search_paths)
+            except CommandNotFoundError as e:
+                span.set_status(trace.StatusCode.ERROR, str(e))
+                return BlockResult.fail(str(e))
+
+            # Build child variables
+            child_vars: dict[str, Any] = {}
+            if block.inherit_variables:
+                child_vars = dict(self._variables)
+
+            # Parse arguments and map to $1, $2, etc.
+            if block.arguments:
+                arg_text = evaluate_template(block.arguments, self._variables)
+                try:
+                    parts = shlex.split(arg_text)
+                except ValueError:
+                    parts = arg_text.split()
+                for i, part in enumerate(parts, 1):
+                    child_vars[f"${i}"] = part
+
             self._protocol.log(
-                f"Agent '{agent_name}' completed: {result.status} "
-                f"(exit_code={result.exit_code})"
+                f"Entering sub-command '{block.command_name}' (depth {depth + 1})"
             )
 
-            # Store exit code variable from the spawn block
-            # We need to find the original spawn block for this agent
-            for bid, b in self._flowchart.blocks.items():
-                if isinstance(b, SpawnBlock):
-                    spawn_agent = evaluate_template(b.agent_name, self._variables)
-                    if spawn_agent == agent_name and b.exit_code_variable:
-                        self._variables[b.exit_code_variable] = result.exit_code
+            # Create child walker sharing the same session and protocol
+            child_walker = GraphWalker(
+                cmd.flowchart,
+                self._session,
+                child_vars,
+                self._protocol,
+                max_blocks=self._max_blocks,
+                call_stack=[*self._call_stack, block.command_name],
+                max_depth=self._max_depth,
+                search_paths=self._search_paths,
+            )
 
-            # Clean up — stop dedicated sessions (not the shared parent)
-            spawned_session = self._spawned_sessions.get(agent_name)
-            if spawned_session and spawned_session is not self._session:
-                await spawned_session.stop()
-            self._spawned_tasks.pop(agent_name, None)
-            self._spawned_sessions.pop(agent_name, None)
+            child_result = await child_walker.run()
 
-        if errors:
-            return BlockResult.fail("; ".join(errors))
+            self._protocol.log(
+                f"Sub-command '{block.command_name}' finished: {child_result.status}"
+            )
 
-        return BlockResult.ok()
+            if child_result.status != "completed":
+                # Include the child's error for better diagnostics
+                child_errors = [
+                    e.result.error for e in child_result.log if e.result.error
+                ]
+                detail = child_errors[-1] if child_errors else child_result.status
+                span.set_status(trace.StatusCode.ERROR, detail)
+                return BlockResult.fail(
+                    f"Sub-command '{block.command_name}' failed: {detail}"
+                )
 
-    def _exec_exit(self, block: ExitBlock) -> BlockResult:
-        """Handle an explicit exit with a given exit code."""
-        message = evaluate_template(block.exit_message, self._variables) if block.exit_message else ""
-        self._protocol.log(
-            f"Exit block '{block.name}': code={block.exit_code}, message={message}"
-        )
-        return BlockResult.exit(code=block.exit_code, message=message)
+            # Merge output variables back into parent scope
+            if block.merge_output:
+                # Don't merge positional args ($1, $2, etc.) back
+                for k, v in child_result.variables.items():
+                    if not k.startswith("$"):
+                        self._variables[k] = v
 
-    async def _exec_input(self, block: InputBlock) -> BlockResult:
-        """Pause and wait for user input, send to agent, optionally capture response."""
-        self._protocol.log(f"Input block '{block.name}': waiting for user input")
-        self._protocol.emit_system(
-            "input_request",
-            {"block_id": block.id, "block_name": block.name},
-        )
-
-        # Block until we receive an input_response for this block
-        while True:
-            msg = await self._protocol.read_message()
-            if (
-                msg.get("type") == "input_response"
-                and msg.get("block_id") == block.id
-            ):
-                user_text = msg.get("content", "")
-                break
-            # Put unrelated messages back on the inbox for other consumers
-            await self._protocol._inbox.put(msg)
-
-        if not user_text:
-            self._protocol.log(f"Input block '{block.name}': received empty input")
-            return BlockResult.ok(output="")
-
-        # Send user input to the agent session
-        result = await self._session.query(
-            user_text, block_id=block.id, block_name=block.name
-        )
-
-        # Capture response in variable if configured
-        if block.output_variable and result.response_text:
-            self._variables[block.output_variable] = result.response_text
-
-        return BlockResult.ok(output=result.response_text)
-
-    async def _cleanup_spawned(self) -> None:
-        """Cancel and clean up any remaining spawned tasks and sessions."""
-        for agent_name, task in list(self._spawned_tasks.items()):
-            if not task.done():
-                task.cancel()
-                try:
-                    await task
-                except (asyncio.CancelledError, Exception):
-                    pass
-        # Stop dedicated sessions (not the shared parent)
-        for agent_name, session in list(self._spawned_sessions.items()):
-            if session is not self._session:
-                await session.stop()
-        self._spawned_tasks.clear()
-        self._spawned_sessions.clear()
+            return BlockResult.ok(output=json.dumps(child_result.variables))
 
     def _find_start_block(self) -> BlockBase | None:
         """Find the start block in the flowchart."""
@@ -758,7 +517,7 @@ class GraphWalker:
 
     def _next_block(self, current: BlockBase, result: BlockResult) -> BlockBase | None:
         """Find the next block to execute based on connections."""
-        if current.type in (BlockType.END, BlockType.EXIT):
+        if current.type == BlockType.END:
             return None
 
         outgoing = [
