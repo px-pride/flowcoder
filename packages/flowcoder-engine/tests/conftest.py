@@ -63,6 +63,12 @@ class MockProtocol:
     def emit(self, msg: dict) -> None:
         self.messages.append(msg)
 
+    def emit_system(self, subtype: str, data: dict | None = None) -> None:
+        msg: dict = {"type": "system", "subtype": subtype}
+        if data:
+            msg["data"] = data
+        self.messages.append(msg)
+
     def emit_block_start(self, block_id: str, block_name: str, block_type: str) -> None:
         self.messages.append({
             "type": "system",
