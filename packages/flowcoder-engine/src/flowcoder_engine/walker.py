@@ -18,11 +18,15 @@ from flowcoder_flowchart import (
     BlockType,
     BranchBlock,
     CommandBlock,
+    ExitBlock,
     Flowchart,
+    InputBlock,
     PromptBlock,
     RefreshBlock,
+    SpawnBlock,
     VariableBlock,
     VariableType,
+    WaitBlock,
 )
 from opentelemetry import trace
 
@@ -53,6 +57,7 @@ class BlockResult:
     output: str = ""
     error: str = ""
     branch_taken: bool | None = None
+    exit_code: int | None = None
 
     @classmethod
     def ok(cls, output: str = "", branch_taken: bool | None = None) -> BlockResult:
@@ -61,6 +66,10 @@ class BlockResult:
     @classmethod
     def fail(cls, error: str) -> BlockResult:
         return cls(success=False, error=error)
+
+    @classmethod
+    def exit(cls, code: int = 0, message: str = "") -> BlockResult:
+        return cls(success=True, output=message, exit_code=code)
 
 
 @dataclass
@@ -76,7 +85,8 @@ class LogEntry:
 class ExecutionResult:
     variables: dict[str, Any]
     log: list[LogEntry]
-    status: str  # "completed" | "halted" | "error"
+    status: str  # "completed" | "halted" | "error" | "exited"
+    exit_code: int = 0
     duration_ms: int = 0
 
 
@@ -183,6 +193,19 @@ class GraphWalker:
         self._call_stack = call_stack or []
         self._max_depth = max_depth
         self._search_paths = search_paths or []
+        self._spawned_sessions: dict[str, Session] = {}
+        self._spawned_tasks: dict[str, asyncio.Task[ExecutionResult]] = {}
+        self._spawned_results: dict[str, ExecutionResult] = {}
+        self._halt_requested = False
+
+    def halt(self) -> None:
+        """Request the walker to halt after the current block."""
+        self._halt_requested = True
+
+    def resume(self) -> None:
+        """Clear the halt flag so execution can continue."""
+        self._halt_requested = False
+        self._halted = False
 
     async def run(self) -> ExecutionResult:
         """Execute the flowchart from start to end."""
@@ -195,59 +218,78 @@ class GraphWalker:
         ) as run_span:
             start_time = time.monotonic()
             current = self._find_start_block()
+            exit_code = 0
 
-            while current and not self._halted:
-                if self._blocks_executed >= self._max_blocks:
-                    raise ExecutionError(
-                        f"Safety limit: exceeded {self._max_blocks} blocks"
+            try:
+                while current and not self._halted:
+                    if self._halt_requested:
+                        self._halted = True
+                        break
+
+                    if self._blocks_executed >= self._max_blocks:
+                        raise ExecutionError(
+                            f"Safety limit: exceeded {self._max_blocks} blocks"
+                        )
+
+                    self._blocks_executed += 1
+                    self._protocol.emit_block_start(
+                        current.id, current.name, current.type
                     )
-
-                self._blocks_executed += 1
-                self._protocol.emit_block_start(
-                    current.id, current.name, current.type
-                )
-                self._protocol.log(
-                    f"Executing block \"{current.name}\" "
-                    f"({current.type}, session={current.session})"
-                )
-
-                block_start = time.monotonic()
-                result = await self._execute_block(current)
-                block_ms = int((time.monotonic() - block_start) * 1000)
-
-                # Soft timeout warning
-                if block_ms > SOFT_TIMEOUT_SECONDS * 1000:
                     self._protocol.log(
-                        f"WARNING: Block \"{current.name}\" took {block_ms}ms "
-                        f"(>{SOFT_TIMEOUT_SECONDS}s soft timeout)"
+                        f"Executing block \"{current.name}\" "
+                        f"({current.type}, session={current.session})"
                     )
 
-                entry = LogEntry(
-                    block_id=current.id,
-                    block_name=current.name,
-                    block_type=current.type,
-                    result=result,
-                    duration_ms=block_ms,
-                )
-                self._log.append(entry)
+                    block_start = time.monotonic()
+                    result = await self._execute_block(current)
+                    block_ms = int((time.monotonic() - block_start) * 1000)
 
-                self._protocol.emit_block_complete(
-                    current.id, current.name, result.success
-                )
+                    if block_ms > SOFT_TIMEOUT_SECONDS * 1000:
+                        self._protocol.log(
+                            f"WARNING: Block \"{current.name}\" took {block_ms}ms "
+                            f"(>{SOFT_TIMEOUT_SECONDS}s soft timeout)"
+                        )
 
-                if not result.success:
-                    self._halted = True
-                    break
+                    entry = LogEntry(
+                        block_id=current.id,
+                        block_name=current.name,
+                        block_type=current.type,
+                        result=result,
+                        duration_ms=block_ms,
+                    )
+                    self._log.append(entry)
 
-                current = self._next_block(current, result)
+                    self._protocol.emit_block_complete(
+                        current.id, current.name, result.success
+                    )
+
+                    if result.exit_code is not None:
+                        exit_code = result.exit_code
+                        break
+
+                    if not result.success:
+                        self._halted = True
+                        break
+
+                    current = self._next_block(current, result)
+            finally:
+                await self._cleanup_spawned()
 
             total_ms = int((time.monotonic() - start_time) * 1000)
-            status = "completed" if not self._halted else "halted"
+
+            if exit_code != 0:
+                status = "exited"
+            elif self._halted:
+                status = "halted"
+            else:
+                status = "completed"
+
             run_span.set_attributes({"flowchart.status": status, "flowchart.duration_ms": total_ms})
             return ExecutionResult(
                 variables=self._variables,
                 log=self._log,
                 status=status,
+                exit_code=exit_code,
                 duration_ms=total_ms,
             )
 
@@ -280,6 +322,18 @@ class GraphWalker:
                 case BlockType.REFRESH:
                     assert isinstance(block, RefreshBlock)
                     return await self._exec_refresh(block)
+                case BlockType.SPAWN:
+                    assert isinstance(block, SpawnBlock)
+                    return await self._exec_spawn(block)
+                case BlockType.WAIT:
+                    assert isinstance(block, WaitBlock)
+                    return await self._exec_wait(block)
+                case BlockType.EXIT:
+                    assert isinstance(block, ExitBlock)
+                    return self._exec_exit(block)
+                case BlockType.INPUT:
+                    assert isinstance(block, InputBlock)
+                    return await self._exec_input(block)
                 case _:
                     return BlockResult.fail(f"Unknown block type: {block.type}")
 
@@ -508,6 +562,183 @@ class GraphWalker:
 
             return BlockResult.ok(output=json.dumps(child_result.variables))
 
+    async def _exec_spawn(self, block: SpawnBlock) -> BlockResult:
+        """Spawn a named agent sub-session running a command asynchronously."""
+        agent_name = evaluate_template(block.agent_name, self._variables)
+
+        if agent_name in self._spawned_tasks:
+            return BlockResult.fail(
+                f"Agent '{agent_name}' is already spawned. "
+                f"Wait for it before spawning again."
+            )
+
+        try:
+            cmd = resolve_command(block.command_name, search_paths=self._search_paths)
+        except CommandNotFoundError as e:
+            return BlockResult.fail(str(e))
+
+        child_vars: dict[str, Any] = {}
+        if block.inherit_variables:
+            child_vars = dict(self._variables)
+
+        if block.arguments:
+            arg_text = evaluate_template(block.arguments, self._variables)
+            try:
+                parts = shlex.split(arg_text)
+            except ValueError:
+                parts = arg_text.split()
+            for i, part in enumerate(parts, 1):
+                child_vars[f"${i}"] = part
+
+        # Use Session.clone() for clean session creation
+        child_session = self._session.clone(agent_name)
+        if block.model:
+            # Adjust the claude_cmd for a different model
+            child_session._claude_cmd = [
+                *self._session._claude_cmd, "--model", block.model
+            ]
+            self._protocol.log(
+                f"Spawning agent '{agent_name}' with model '{block.model}' "
+                f"running command '{block.command_name}'"
+            )
+        else:
+            self._protocol.log(
+                f"Spawning agent '{agent_name}' running command '{block.command_name}'"
+            )
+
+        await child_session.start()
+
+        child_walker = GraphWalker(
+            cmd.flowchart,
+            child_session,
+            child_vars,
+            self._protocol,
+            max_blocks=self._max_blocks,
+            call_stack=[*self._call_stack, f"spawn:{block.command_name}"],
+            max_depth=self._max_depth,
+            search_paths=self._search_paths,
+        )
+
+        task = asyncio.create_task(child_walker.run())
+        self._spawned_tasks[agent_name] = task
+        self._spawned_sessions[agent_name] = child_session
+
+        return BlockResult.ok(output=f"Spawned agent '{agent_name}'")
+
+    async def _exec_wait(self, block: WaitBlock) -> BlockResult:
+        """Wait for spawned agent sessions to complete."""
+        wait_for = block.wait_for if block.wait_for else list(self._spawned_tasks.keys())
+
+        if not wait_for:
+            self._protocol.log("Wait block: no spawned agents to wait for")
+            return BlockResult.ok()
+
+        errors: list[str] = []
+        for agent_name in wait_for:
+            task = self._spawned_tasks.get(agent_name)
+            if not task:
+                errors.append(f"No spawned agent named '{agent_name}'")
+                continue
+
+            try:
+                if block.timeout_seconds:
+                    exec_result = await asyncio.wait_for(
+                        task, timeout=block.timeout_seconds
+                    )
+                else:
+                    exec_result = await task
+            except asyncio.TimeoutError:
+                errors.append(
+                    f"Agent '{agent_name}' timed out after {block.timeout_seconds}s"
+                )
+                task.cancel()
+                continue
+            except Exception as e:
+                errors.append(f"Agent '{agent_name}' failed: {e}")
+                continue
+
+            self._spawned_results[agent_name] = exec_result
+            self._protocol.log(
+                f"Agent '{agent_name}' completed: {exec_result.status}"
+            )
+
+            # Store exit code variable from the spawn block
+            for b in self._flowchart.blocks.values():
+                if isinstance(b, SpawnBlock):
+                    spawn_agent = evaluate_template(b.agent_name, self._variables)
+                    if spawn_agent == agent_name and b.exit_code_variable:
+                        self._variables[b.exit_code_variable] = exec_result.exit_code
+
+            # Clean up the spawned session
+            spawned_session = self._spawned_sessions.get(agent_name)
+            if spawned_session and spawned_session is not self._session:
+                await spawned_session.stop()
+            self._spawned_tasks.pop(agent_name, None)
+            self._spawned_sessions.pop(agent_name, None)
+
+        if errors:
+            return BlockResult.fail("; ".join(errors))
+
+        return BlockResult.ok()
+
+    def _exec_exit(self, block: ExitBlock) -> BlockResult:
+        """Handle an explicit exit with a given exit code."""
+        message = (
+            evaluate_template(block.exit_message, self._variables)
+            if block.exit_message
+            else ""
+        )
+        self._protocol.log(
+            f"Exit block '{block.name}': code={block.exit_code}, message={message}"
+        )
+        return BlockResult.exit(code=block.exit_code, message=message)
+
+    async def _exec_input(self, block: InputBlock) -> BlockResult:
+        """Pause and wait for user input, send to agent, optionally capture response."""
+        self._protocol.log(f"Input block '{block.name}': waiting for user input")
+        self._protocol.emit_system(
+            "input_request",
+            {"block_id": block.id, "block_name": block.name},
+        )
+
+        while True:
+            msg = await self._protocol.read_message()
+            if (
+                msg.get("type") == "input_response"
+                and msg.get("block_id") == block.id
+            ):
+                user_text = msg.get("content", "")
+                break
+            self._protocol.push_message(msg)
+
+        if not user_text:
+            self._protocol.log(f"Input block '{block.name}': received empty input")
+            return BlockResult.ok(output="")
+
+        result = await self._session.query(
+            user_text, block_id=block.id, block_name=block.name
+        )
+
+        if block.output_variable and result.response_text:
+            self._variables[block.output_variable] = result.response_text
+
+        return BlockResult.ok(output=result.response_text)
+
+    async def _cleanup_spawned(self) -> None:
+        """Cancel and clean up any remaining spawned tasks and sessions."""
+        for agent_name, task in list(self._spawned_tasks.items()):
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        for agent_name, session in list(self._spawned_sessions.items()):
+            if session is not self._session:
+                await session.stop()
+        self._spawned_tasks.clear()
+        self._spawned_sessions.clear()
+
     def _find_start_block(self) -> BlockBase | None:
         """Find the start block in the flowchart."""
         for block in self._flowchart.blocks.values():
@@ -517,7 +748,7 @@ class GraphWalker:
 
     def _next_block(self, current: BlockBase, result: BlockResult) -> BlockBase | None:
         """Find the next block to execute based on connections."""
-        if current.type == BlockType.END:
+        if current.type in (BlockType.END, BlockType.EXIT):
             return None
 
         outgoing = [
