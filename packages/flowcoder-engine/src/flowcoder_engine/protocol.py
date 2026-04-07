@@ -108,6 +108,10 @@ class ProtocolHandler:
         """
         self.emit(inner_msg)
 
+    def emit_stderr(self, line: str, session_name: str) -> None:
+        """Forward an inner claude stderr line to the client."""
+        self.emit_system("stderr", {"session": session_name, "line": line})
+
     def log(self, message: str) -> None:
         """Write a log line to stderr."""
         sys.stderr.write(f"[flowcoder] {message}\n")

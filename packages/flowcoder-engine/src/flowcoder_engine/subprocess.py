@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import shutil
-from asyncio.subprocess import DEVNULL, PIPE
+from asyncio.subprocess import PIPE
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class ClaudeProcess:
             *cmd,
             stdin=PIPE,
             stdout=PIPE,
-            stderr=DEVNULL,
+            stderr=PIPE,
             env=env,
             cwd=cwd or None,
             limit=10 * 1024 * 1024,  # 10 MB — Claude stream-json lines can be large
@@ -79,6 +79,15 @@ class ClaudeProcess:
                 return json.loads(line)
             except json.JSONDecodeError:
                 continue
+
+    async def read_stderr(self) -> str | None:
+        """Read one line from stderr. Returns None on EOF."""
+        if not self._proc or not self._proc.stderr:
+            return None
+        line_bytes = await self._proc.stderr.readline()
+        if not line_bytes:
+            return None
+        return line_bytes.decode().rstrip("\n")
 
     async def stop(self) -> None:
         """Terminate the subprocess and clean up."""

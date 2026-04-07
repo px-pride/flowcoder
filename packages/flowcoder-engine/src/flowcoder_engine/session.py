@@ -9,9 +9,13 @@ Uses the inline ClaudeProcess for subprocess management.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
+
+log = logging.getLogger(__name__)
 
 from opentelemetry import trace
 
@@ -80,12 +84,23 @@ class Session:
         self._protocol = protocol
         self._control_callback = control_callback
         self._process: ClaudeProcess | None = None
+        self._stderr_task: asyncio.Task[None] | None = None
+
+    def clone(self, name: str) -> Session:
+        """Create a new Session with the same config but a different name."""
+        return Session(
+            name=name,
+            claude_cmd=list(self._claude_cmd),
+            protocol=self._protocol,
+            control_callback=self._control_callback,
+        )
 
     async def start(self) -> None:
         """Spawn the claude subprocess."""
         _tracer.start_span("session.start", attributes={"session.name": self.name}).end()
         self._process = ClaudeProcess()
         await self._process.start(self._claude_cmd, _clean_env(), os.getcwd())
+        self._stderr_task = asyncio.create_task(self._forward_stderr())
 
     async def query(
         self,
@@ -201,6 +216,18 @@ class Session:
             }
             await self._process.write(deny)
 
+    async def _forward_stderr(self) -> None:
+        """Read stderr lines and forward to protocol/log."""
+        assert self._process is not None
+        while True:
+            line = await self._process.read_stderr()
+            if line is None:
+                break
+            if self._protocol:
+                self._protocol.emit_stderr(line, self.name)
+            else:
+                log.debug("[%s stderr] %s", self.name, line)
+
     async def clear(self) -> None:
         """Clear conversation by restarting the subprocess.
 
@@ -213,6 +240,13 @@ class Session:
     async def stop(self) -> None:
         """Terminate the subprocess."""
         _tracer.start_span("session.stop", attributes={"session.name": self.name}).end()
+        if self._stderr_task:
+            self._stderr_task.cancel()
+            try:
+                await self._stderr_task
+            except asyncio.CancelledError:
+                pass
+            self._stderr_task = None
         if self._process:
             await self._process.stop()
             self._process = None
