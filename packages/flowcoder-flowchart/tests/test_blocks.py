@@ -8,12 +8,16 @@ from flowcoder_flowchart import (
     BranchBlock,
     CommandBlock,
     EndBlock,
+    ExitBlock,
+    InputBlock,
     Position,
     PromptBlock,
     RefreshBlock,
+    SpawnBlock,
     StartBlock,
     VariableBlock,
     VariableType,
+    WaitBlock,
 )
 from pydantic import TypeAdapter
 
@@ -183,3 +187,154 @@ class TestBlockDiscriminatedUnion:
         assert isinstance(restored, BashBlock)
         assert restored.working_directory == "/tmp"
         assert restored.exit_code_variable == "rc"
+
+
+class TestSpawnBlock:
+    def test_creation(self):
+        b = SpawnBlock(
+            name="Spawn Worker",
+            agent_name="worker-1",
+            command_name="sub-flow",
+            arguments="--fast",
+            model="haiku",
+        )
+        assert b.type == BlockType.SPAWN
+        assert b.agent_name == "worker-1"
+        assert b.command_name == "sub-flow"
+        assert b.arguments == "--fast"
+        assert b.model == "haiku"
+        assert b.inherit_variables is False
+        assert b.exit_code_variable is None
+        assert b.config_file is None
+
+    def test_defaults(self):
+        b = SpawnBlock()
+        assert b.agent_name == ""
+        assert b.command_name == ""
+        assert b.arguments == ""
+        assert b.model is None
+
+    def test_deserialize(self):
+        b = BlockAdapter.validate_python({
+            "type": "spawn",
+            "name": "S",
+            "command_name": "sub",
+            "agent_name": "a1",
+        })
+        assert isinstance(b, SpawnBlock)
+        assert b.command_name == "sub"
+        assert b.agent_name == "a1"
+
+    def test_roundtrip(self):
+        original = SpawnBlock(
+            id="sp1",
+            name="Spawn",
+            agent_name="worker",
+            command_name="build",
+            model="opus",
+            inherit_variables=True,
+            exit_code_variable="rc",
+        )
+        data = original.model_dump()
+        restored = BlockAdapter.validate_python(data)
+        assert isinstance(restored, SpawnBlock)
+        assert restored.agent_name == "worker"
+        assert restored.model == "opus"
+        assert restored.inherit_variables is True
+        assert restored.exit_code_variable == "rc"
+
+
+class TestWaitBlock:
+    def test_creation(self):
+        b = WaitBlock(
+            name="Wait All",
+            wait_for=["worker-1", "worker-2"],
+            timeout_seconds=300,
+        )
+        assert b.type == BlockType.WAIT
+        assert b.wait_for == ["worker-1", "worker-2"]
+        assert b.timeout_seconds == 300
+
+    def test_defaults(self):
+        b = WaitBlock()
+        assert b.wait_for == []
+        assert b.timeout_seconds is None
+
+    def test_deserialize(self):
+        b = BlockAdapter.validate_python({
+            "type": "wait",
+            "name": "W",
+            "wait_for": ["a1"],
+        })
+        assert isinstance(b, WaitBlock)
+        assert b.wait_for == ["a1"]
+
+    def test_roundtrip_json(self):
+        original = WaitBlock(
+            id="w1",
+            name="Wait",
+            wait_for=["a", "b"],
+            timeout_seconds=60,
+        )
+        json_str = original.model_dump_json()
+        restored = BlockAdapter.validate_json(json_str)
+        assert isinstance(restored, WaitBlock)
+        assert restored.wait_for == ["a", "b"]
+        assert restored.timeout_seconds == 60
+
+
+class TestExitBlock:
+    def test_creation(self):
+        b = ExitBlock(name="Bail", exit_code=1, exit_message="Failed")
+        assert b.type == BlockType.EXIT
+        assert b.exit_code == 1
+        assert b.exit_message == "Failed"
+
+    def test_defaults(self):
+        b = ExitBlock()
+        assert b.exit_code == 0
+        assert b.exit_message == ""
+
+    def test_deserialize(self):
+        b = BlockAdapter.validate_python({
+            "type": "exit",
+            "name": "X",
+            "exit_code": 2,
+        })
+        assert isinstance(b, ExitBlock)
+        assert b.exit_code == 2
+
+    def test_roundtrip(self):
+        original = ExitBlock(id="x1", name="Exit", exit_code=42, exit_message="done")
+        data = original.model_dump()
+        restored = BlockAdapter.validate_python(data)
+        assert isinstance(restored, ExitBlock)
+        assert restored.exit_code == 42
+        assert restored.exit_message == "done"
+
+
+class TestInputBlock:
+    def test_creation(self):
+        b = InputBlock(name="Get Input", output_variable="user_response")
+        assert b.type == BlockType.INPUT
+        assert b.output_variable == "user_response"
+
+    def test_defaults(self):
+        b = InputBlock()
+        assert b.output_variable is None
+
+    def test_deserialize(self):
+        b = BlockAdapter.validate_python({
+            "type": "input",
+            "name": "I",
+            "output_variable": "answer",
+        })
+        assert isinstance(b, InputBlock)
+        assert b.output_variable == "answer"
+
+    def test_roundtrip_json(self):
+        original = InputBlock(id="i1", name="Ask", output_variable="resp")
+        json_str = original.model_dump_json()
+        restored = BlockAdapter.validate_json(json_str)
+        assert isinstance(restored, InputBlock)
+        assert restored.output_variable == "resp"

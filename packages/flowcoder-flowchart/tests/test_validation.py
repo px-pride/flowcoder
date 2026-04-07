@@ -6,9 +6,13 @@ from flowcoder_flowchart import (
     BranchBlock,
     Connection,
     EndBlock,
+    ExitBlock,
     Flowchart,
+    InputBlock,
     PromptBlock,
+    SpawnBlock,
     StartBlock,
+    WaitBlock,
     validate,
 )
 
@@ -227,3 +231,79 @@ class TestValidationRules:
         result = validate(fc)
         assert result.valid
         assert result.errors == []
+
+    def test_spawn_empty_command_name(self):
+        fc = self._make_fc(
+            {
+                "b1": StartBlock(id="b1"),
+                "b2": SpawnBlock(id="b2", name="Bad", command_name=""),
+                "b3": EndBlock(id="b3"),
+            },
+            [
+                Connection(source_id="b1", target_id="b2"),
+                Connection(source_id="b2", target_id="b3"),
+            ],
+        )
+        result = validate(fc)
+        assert not result.valid
+        assert any("empty command_name" in e.lower() for e in result.errors)
+
+    def test_spawn_valid(self):
+        fc = self._make_fc(
+            {
+                "b1": StartBlock(id="b1"),
+                "b2": SpawnBlock(id="b2", command_name="sub", agent_name="w1"),
+                "b3": WaitBlock(id="b3", wait_for=["w1"]),
+                "b4": EndBlock(id="b4"),
+            },
+            [
+                Connection(source_id="b1", target_id="b2"),
+                Connection(source_id="b2", target_id="b3"),
+                Connection(source_id="b3", target_id="b4"),
+            ],
+        )
+        result = validate(fc)
+        assert result.valid
+
+    def test_wait_empty_wait_for(self):
+        fc = self._make_fc(
+            {
+                "b1": StartBlock(id="b1"),
+                "b2": WaitBlock(id="b2", name="Bad", wait_for=[]),
+                "b3": EndBlock(id="b3"),
+            },
+            [
+                Connection(source_id="b1", target_id="b2"),
+                Connection(source_id="b2", target_id="b3"),
+            ],
+        )
+        result = validate(fc)
+        assert not result.valid
+        assert any("empty wait_for" in e.lower() for e in result.errors)
+
+    def test_exit_block_no_outgoing_ok(self):
+        fc = self._make_fc(
+            {
+                "b1": StartBlock(id="b1"),
+                "b2": ExitBlock(id="b2", exit_code=1, exit_message="fail"),
+            },
+            [Connection(source_id="b1", target_id="b2")],
+        )
+        result = validate(fc)
+        # ExitBlock is terminal — no "no outgoing" warning
+        assert not any("no outgoing" in w.lower() for w in result.warnings)
+
+    def test_input_block_valid(self):
+        fc = self._make_fc(
+            {
+                "b1": StartBlock(id="b1"),
+                "b2": InputBlock(id="b2", output_variable="resp"),
+                "b3": EndBlock(id="b3"),
+            },
+            [
+                Connection(source_id="b1", target_id="b2"),
+                Connection(source_id="b2", target_id="b3"),
+            ],
+        )
+        result = validate(fc)
+        assert result.valid
