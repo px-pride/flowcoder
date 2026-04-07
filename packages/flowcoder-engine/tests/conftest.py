@@ -58,6 +58,7 @@ class MockProtocol:
         self.messages: list[dict] = []
         self.logs: list[str] = []
         self.forwarded: list[dict] = []
+        self.stderr_lines: list[dict] = []
 
     def emit(self, msg: dict) -> None:
         self.messages.append(msg)
@@ -92,6 +93,9 @@ class MockProtocol:
             "block_name": block_name,
             "message": inner_msg,
         })
+
+    def emit_stderr(self, line: str, session_name: str) -> None:
+        self.stderr_lines.append({"session": session_name, "line": line})
 
     def log(self, message: str) -> None:
         self.logs.append(message)
