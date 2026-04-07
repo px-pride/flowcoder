@@ -22,7 +22,15 @@ from .blocks import (
 from .command import Command, CommandMetadata
 from .io import dump, dump_command, load, load_command, save, save_command
 from .models import Argument, Connection, Flowchart, SessionConfig
-from .templates import ArgRef, Literal, TemplatePart, VarRef, parse_template
+from .templates import (
+    ArgRef,
+    Conditional,
+    Literal,
+    TemplatePart,
+    VarRef,
+    parse_template,
+    validate_conditionals,
+)
 from .validation import ValidationResult, validate
 
 __all__ = [
@@ -36,6 +44,7 @@ __all__ = [
     "Command",
     "CommandBlock",
     "CommandMetadata",
+    "Conditional",
     "Connection",
     "EndBlock",
     "ExitBlock",
@@ -62,4 +71,5 @@ __all__ = [
     "save",
     "save_command",
     "validate",
+    "validate_conditionals",
 ]
