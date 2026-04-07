@@ -18,6 +18,17 @@ from flowcoder_flowchart.templates import (
 )
 
 
+def _format_value(value: Any) -> str:
+    """Format a variable value as a string for template substitution.
+
+    Whole-number floats (e.g. 3.0) are rendered without the decimal
+    so they work in contexts like bash arithmetic: echo $((3+1)).
+    """
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
 def evaluate_template(text: str, variables: dict[str, Any]) -> str:
     """Resolve a template string against current variables.
 
@@ -43,9 +54,9 @@ def _evaluate_parts(parts: list, variables: dict[str, Any]) -> str:
             result.append(part.text)
         elif isinstance(part, ArgRef):
             key = f"${part.index}"
-            result.append(str(variables.get(key, "")))
+            result.append(_format_value(variables.get(key, "")))
         elif isinstance(part, VarRef):
-            result.append(str(variables.get(part.name, "")))
+            result.append(_format_value(variables.get(part.name, "")))
         elif isinstance(part, Conditional):
             # Evaluate the condition variable
             value = variables.get(part.variable)

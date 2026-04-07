@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BlockType(str, Enum):
@@ -32,6 +32,10 @@ class BlockType(str, Enum):
     INPUT = "input"
 
 
+# Compat: map int/float to number
+_VARIABLE_TYPE_ALIASES: dict[str, str] = {"int": "number", "float": "number"}
+
+
 class VariableType(str, Enum):
     STRING = "string"
     NUMBER = "number"
@@ -45,6 +49,8 @@ class Position(BaseModel):
 
 
 class BlockBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str = ""
     session: str = "default"
@@ -80,6 +86,11 @@ class VariableBlock(BlockBase):
     variable_value: str = ""
     variable_type: VariableType = VariableType.STRING
 
+    @field_validator("variable_type", mode="before")
+    @classmethod
+    def normalize_variable_type(cls, v: str) -> str:
+        return _VARIABLE_TYPE_ALIASES.get(v, v)
+
 
 class BashBlock(BlockBase):
     type: Literal[BlockType.BASH] = BlockType.BASH
@@ -93,6 +104,11 @@ class BashBlock(BlockBase):
     # Git per-block control
     disable_auto_git: bool = False
     git_tag: str | None = None
+
+    @field_validator("output_type", mode="before")
+    @classmethod
+    def normalize_output_type(cls, v: str) -> str:
+        return _VARIABLE_TYPE_ALIASES.get(v, v)
 
 
 class CommandBlock(BlockBase):

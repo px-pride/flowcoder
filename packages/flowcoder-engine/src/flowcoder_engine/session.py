@@ -35,15 +35,17 @@ class QueryResult:
 # Message types we forward to the outer consumer
 _FORWARDED_TYPES = {"assistant", "stream_event"}
 
-# Env vars to strip so claude doesn't reject nested sessions
-_CLAUDE_ENV_VARS = ("CLAUDECODE", "CLAUDE_AGENT_SDK_VERSION", "CLAUDE_CODE_ENTRYPOINT")
-
-
 def _clean_env() -> dict[str, str]:
-    """Return a copy of os.environ with claude session vars removed."""
+    """Return a copy of os.environ for the inner Claude CLI.
+
+    Strips CLAUDECODE to prevent nested-session rejection, but preserves
+    (or sets) CLAUDE_AGENT_SDK_VERSION and CLAUDE_CODE_ENTRYPOINT so the
+    inner CLI uses the SDK control protocol for tool permissions and MCP.
+    """
     env = dict(os.environ)
-    for var in _CLAUDE_ENV_VARS:
-        env.pop(var, None)
+    env.pop("CLAUDECODE", None)
+    env.setdefault("CLAUDE_CODE_ENTRYPOINT", "sdk-py")
+    env.setdefault("CLAUDE_AGENT_SDK_VERSION", "flowcoder-engine")
     return env
 
 

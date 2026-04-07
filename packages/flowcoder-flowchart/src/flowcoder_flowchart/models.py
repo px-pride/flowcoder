@@ -12,15 +12,21 @@ from __future__ import annotations
 from typing import Any, Self
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from .blocks import Block
 
 
 class Connection(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
     id: str = Field(default_factory=lambda: str(uuid4()))
-    source_id: str
-    target_id: str
+    source_id: str = Field(
+        validation_alias=AliasChoices("source_id", "source_block_id"),
+    )
+    target_id: str = Field(
+        validation_alias=AliasChoices("target_id", "target_block_id"),
+    )
     label: str | None = None
     is_true_path: bool | None = None
 
@@ -47,6 +53,8 @@ class SessionConfig(BaseModel):
 
 
 class Flowchart(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     blocks: dict[str, Block]
     connections: list[Connection] = Field(default_factory=list)
     sessions: dict[str, SessionConfig] = Field(default_factory=dict)

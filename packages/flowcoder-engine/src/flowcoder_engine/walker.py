@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shlex
 import time
 from asyncio.subprocess import PIPE
@@ -43,7 +44,7 @@ from .json_parser import parse_json_from_response
 from .protocol import ProtocolHandler
 from .resolver import CommandNotFoundError, resolve_command
 from .session import Session
-from .templates import evaluate_template
+from .templates import _is_truthy, evaluate_template
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,66 @@ class ExecutionResult:
     status: str  # "completed" | "halted" | "error" | "exited"
     exit_code: int = 0
     duration_ms: int = 0
+
+
+_COMPARISON_RE = re.compile(
+    r"^\s*(.+?)\s+(==|!=|>=|<=|>|<)\s+(.+?)\s*$"
+)
+
+
+def _coerce_numeric(s: str) -> float | str:
+    """Try to interpret a string as a number; return as-is on failure."""
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return s
+
+
+def _evaluate_condition(condition: str, variables: dict[str, Any]) -> bool:
+    """Evaluate a branch condition string.
+
+    Supports:
+    - Simple variable truthiness: ``fullyImplemented``
+    - Negation: ``!hasErrors``
+    - Comparison: ``exitCode == 0``, ``count > 5``, ``status != "done"``
+    """
+    cond = condition.strip()
+
+    # Negation: !varname
+    if cond.startswith("!"):
+        inner = cond[1:].strip()
+        return not _is_truthy(variables.get(inner))
+
+    # Comparison operators
+    m = _COMPARISON_RE.match(cond)
+    if m:
+        lhs_raw, op, rhs_raw = m.group(1), m.group(2), m.group(3)
+        rhs_str = rhs_raw.strip("\"'")
+        lhs_val = variables.get(lhs_raw, lhs_raw)
+
+        lhs_num = _coerce_numeric(str(lhs_val))
+        rhs_num = _coerce_numeric(rhs_str)
+
+        if isinstance(lhs_num, float) and isinstance(rhs_num, float):
+            match op:
+                case "==": return lhs_num == rhs_num
+                case "!=": return lhs_num != rhs_num
+                case ">":  return lhs_num > rhs_num
+                case "<":  return lhs_num < rhs_num
+                case ">=": return lhs_num >= rhs_num
+                case "<=": return lhs_num <= rhs_num
+
+        lhs_s = str(lhs_val)
+        match op:
+            case "==": return lhs_s == rhs_str
+            case "!=": return lhs_s != rhs_str
+            case ">":  return lhs_s > rhs_str
+            case "<":  return lhs_s < rhs_str
+            case ">=": return lhs_s >= rhs_str
+            case "<=": return lhs_s <= rhs_str
+
+    # Simple variable lookup (original behavior)
+    return _is_truthy(variables.get(cond))
 
 
 # Type alias for git callback hooks
@@ -316,11 +377,18 @@ class GraphWalker:
         return BlockResult.ok(output=result.response_text)
 
     def _exec_branch(self, block: BranchBlock) -> BlockResult:
-        """Evaluate a branch condition against variables."""
-        value = self._variables.get(block.condition)
-        truthy = bool(value) and str(value).lower() not in ("false", "0", "no", "")
+        """Evaluate a branch condition against variables.
+
+        Supports:
+        - Simple variable truthiness: ``fullyImplemented``
+        - Negation: ``!hasErrors``
+        - Comparison operators: ``exitCode == 0``, ``i < 3``
+        - Template refs in conditions: ``i < {{max}}``
+        """
+        condition = evaluate_template(block.condition, self._variables)
+        truthy = _evaluate_condition(condition, self._variables)
         self._protocol.log(
-            f"Branch \"{block.name}\": {block.condition}={value!r} -> {truthy}"
+            f"Branch \"{block.name}\": {block.condition} -> {truthy}"
         )
         return BlockResult.ok(branch_taken=truthy)
 
