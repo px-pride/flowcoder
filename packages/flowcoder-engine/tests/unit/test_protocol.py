@@ -7,6 +7,8 @@ import json
 import sys
 from unittest.mock import patch
 
+import pytest
+
 from flowcoder_engine.protocol import ProtocolHandler
 
 
@@ -64,6 +66,17 @@ class TestEmit:
         assert msg["data"]["block_name"] == "Block1"
         assert msg["data"]["message"] == inner
 
+    def test_emit_stderr(self):
+        p = ProtocolHandler()
+        captured = io.StringIO()
+        with patch.object(sys, "stdout", captured):
+            p.emit_stderr("error line", "worker-1")
+        msg = json.loads(captured.getvalue().strip())
+        assert msg["type"] == "system"
+        assert msg["subtype"] == "stderr"
+        assert msg["data"]["session"] == "worker-1"
+        assert msg["data"]["line"] == "error line"
+
     def test_emit_result(self):
         p = ProtocolHandler()
         captured = io.StringIO()
@@ -73,3 +86,26 @@ class TestEmit:
         assert msg["type"] == "result"
         assert msg["result"] == "done"
         assert msg["is_error"] is False
+
+
+class TestInboxQueue:
+    @pytest.mark.asyncio
+    async def test_push_and_read(self):
+        p = ProtocolHandler()
+        p.push_message({"type": "user", "message": "hello"})
+        msg = await p.read_message()
+        assert msg == {"type": "user", "message": "hello"}
+
+    @pytest.mark.asyncio
+    async def test_push_multiple(self):
+        p = ProtocolHandler()
+        p.push_message({"type": "a"})
+        p.push_message({"type": "b"})
+        m1 = await p.read_message()
+        m2 = await p.read_message()
+        assert m1["type"] == "a"
+        assert m2["type"] == "b"
+
+    def test_busy_flag_default(self):
+        p = ProtocolHandler()
+        assert p.busy is False
