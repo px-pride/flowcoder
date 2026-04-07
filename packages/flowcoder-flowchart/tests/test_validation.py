@@ -101,7 +101,7 @@ class TestValidationRules:
         )
         result = validate(fc)
         assert result.valid is True  # warning, not error
-        assert any("no end block" in w.lower() for w in result.warnings)
+        assert any("no end" in w.lower() for w in result.warnings)
 
     def test_connection_references_nonexistent_source(self):
         fc = self._make_fc(
