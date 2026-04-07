@@ -1,6 +1,13 @@
 """Tests for template parsing."""
 
-from flowcoder_flowchart import ArgRef, Literal, VarRef, parse_template
+from flowcoder_flowchart import (
+    ArgRef,
+    Conditional,
+    Literal,
+    VarRef,
+    parse_template,
+    validate_conditionals,
+)
 
 
 class TestParseTemplate:
@@ -71,3 +78,77 @@ class TestParseTemplate:
         # {{{var}}} — the inner {{var}} should match
         parts = parse_template("{{{var}}}")
         assert parts == [Literal("{"), VarRef("var"), Literal("}")]
+
+
+class TestConditionalTemplates:
+    def test_simple_conditional(self):
+        parts = parse_template("<if debug>extra info</if>")
+        assert parts == [Conditional("debug", [Literal("extra info")])]
+
+    def test_conditional_with_surrounding_text(self):
+        parts = parse_template("before <if verbose>details</if> after")
+        assert parts == [
+            Literal("before "),
+            Conditional("verbose", [Literal("details")]),
+            Literal(" after"),
+        ]
+
+    def test_conditional_with_var_ref_inside(self):
+        parts = parse_template("<if debug>value is {{x}}</if>")
+        assert parts == [
+            Conditional("debug", [Literal("value is "), VarRef("x")])
+        ]
+
+    def test_conditional_with_arg_ref_inside(self):
+        parts = parse_template("<if verbose>arg: $1</if>")
+        assert parts == [
+            Conditional("verbose", [Literal("arg: "), ArgRef(1)])
+        ]
+
+    def test_multiple_conditionals(self):
+        parts = parse_template("<if a>A</if> <if b>B</if>")
+        assert parts == [
+            Conditional("a", [Literal("A")]),
+            Literal(" "),
+            Conditional("b", [Literal("B")]),
+        ]
+
+    def test_conditional_empty_body(self):
+        parts = parse_template("<if flag></if>")
+        assert parts == [Conditional("flag", [])]
+
+    def test_no_conditional(self):
+        parts = parse_template("plain $1 {{var}}")
+        assert parts == [Literal("plain "), ArgRef(1), Literal(" "), VarRef("var")]
+
+    def test_conditional_var_with_dots_and_hyphens(self):
+        parts = parse_template("<if my-var.name>yes</if>")
+        assert parts == [Conditional("my-var.name", [Literal("yes")])]
+
+
+class TestValidateConditionals:
+    def test_balanced_tags(self):
+        errors = validate_conditionals("<if x>content</if>")
+        assert errors == []
+
+    def test_missing_closing_tag(self):
+        errors = validate_conditionals("<if x>content")
+        assert len(errors) == 1
+        assert "mismatched" in errors[0].lower()
+
+    def test_missing_opening_tag(self):
+        errors = validate_conditionals("content</if>")
+        assert len(errors) == 1
+        assert "mismatched" in errors[0].lower()
+
+    def test_if_without_variable(self):
+        errors = validate_conditionals("<if>content</if>")
+        assert any("without variable" in e.lower() for e in errors)
+
+    def test_valid_nested(self):
+        errors = validate_conditionals("<if a><if b>inner</if></if>")
+        assert errors == []
+
+    def test_no_conditionals(self):
+        errors = validate_conditionals("plain text {{var}} $1")
+        assert errors == []
