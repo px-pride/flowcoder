@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from flowcoder_engine.session import QueryResult, Session
+from flowcoder_engine.session import ClaudeSession as Session, QueryResult
 
 
 class TestSessionInit:

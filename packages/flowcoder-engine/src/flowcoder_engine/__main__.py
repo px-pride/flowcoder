@@ -47,9 +47,10 @@ except ImportError:
     _HAS_OTEL_SDK = False
 
 from .cli import build_inner_claude_cmd, build_inner_env, build_variables, parse_args
+from .codex_session import CodexSession
 from .protocol import ProtocolHandler
 from .resolver import CommandNotFoundError, resolve_command
-from .session import Session
+from .session import BaseSession, ClaudeSession
 from .subprocess import ClaudeProcess, find_claude
 from .walker import ExecutionError, GraphWalker
 
@@ -240,17 +241,24 @@ async def main() -> None:
     router = _MessageRouter(stdin_reader)
     await router.start()
 
-    # Build session for flowchart execution (shares the same inner process)
-    session = Session(
-        "main",
-        claude_cmd,
-        protocol=protocol,
-        control_callback=lambda req: _handle_control_request(
-            req, protocol, router
-        ),
-    )
-    # Attach the already-running process to the session
-    session._process = process
+    # Build session for flowchart execution.
+    # Claude backend shares the proxy's inner process.
+    # Codex backend creates its own Node.js subprocess.
+    session: BaseSession
+    if args.backend == "codex":
+        session = CodexSession("main", cwd=args.cwd or os.getcwd())
+        protocol.log("Using Codex backend for flowchart execution")
+    else:
+        session = ClaudeSession(
+            "main",
+            claude_cmd,
+            protocol=protocol,
+            control_callback=lambda req: _handle_control_request(
+                req, protocol, router
+            ),
+        )
+        # Attach the already-running process to the session
+        session._process = process  # type: ignore[attr-defined]
 
     try:
         while not shutdown_event.is_set():
@@ -421,7 +429,7 @@ async def _forward_until_control_response(
 
 
 async def _run_flowchart_takeover(
-    session: Session,
+    session: BaseSession,
     cmd: fc_lib.Command,
     cmd_name: str,
     cmd_args: str,

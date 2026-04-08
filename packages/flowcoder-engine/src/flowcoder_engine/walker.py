@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from .protocol import ProtocolHandler
-    from .session import Session
+    from .session import BaseSession
 
 logger = logging.getLogger(__name__)
 _tracer = trace.get_tracer(__name__)
@@ -174,7 +174,7 @@ class GraphWalker:
     def __init__(
         self,
         flowchart: Flowchart,
-        session: Session,
+        session: BaseSession,
         variables: dict[str, Any],
         protocol: ProtocolHandler,
         max_blocks: int = 1000,
@@ -193,7 +193,7 @@ class GraphWalker:
         self._call_stack = call_stack or []
         self._max_depth = max_depth
         self._search_paths = search_paths or []
-        self._spawned_sessions: dict[str, Session] = {}
+        self._spawned_sessions: dict[str, BaseSession] = {}
         self._spawned_tasks: dict[str, asyncio.Task[ExecutionResult]] = {}
         self._spawned_results: dict[str, ExecutionResult] = {}
         self._halt_requested = False
@@ -593,18 +593,14 @@ class GraphWalker:
             for i, part in enumerate(parts, 1):
                 child_vars[f"${i}"] = part
 
-        # Use Session.clone() for clean session creation
-        child_session = self._session.clone(agent_name)
         if block.model:
-            # Adjust the claude_cmd for a different model
-            child_session._claude_cmd = [
-                *self._session._claude_cmd, "--model", block.model
-            ]
+            child_session = self._session.with_model(block.model).clone(agent_name)
             self._protocol.log(
                 f"Spawning agent '{agent_name}' with model '{block.model}' "
                 f"running command '{command_name}'"
             )
         else:
+            child_session = self._session.clone(agent_name)
             self._protocol.log(
                 f"Spawning agent '{agent_name}' running command '{command_name}'"
             )
