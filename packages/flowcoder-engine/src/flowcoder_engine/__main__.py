@@ -291,6 +291,20 @@ async def main() -> None:
                             continue
 
                         # Known command — takeover for flowchart execution
+                        # Drain stale control_responses left from a previous
+                        # flowchart.  Late-arriving responses cause the next
+                        # flowchart's _handle_control_request to consume a
+                        # mismatched response, which silently deadlocks inner
+                        # Claude.
+                        _drained = 0
+                        while not router.control_response_queue.empty():
+                            router.control_response_queue.get_nowait()
+                            _drained += 1
+                        if _drained:
+                            protocol.log(
+                                f"Drained {_drained} stale control_response(s)"
+                            )
+
                         protocol.log(f"Flowchart takeover: /{cmd_name} {cmd_args}")
                         await _run_flowchart_takeover(
                             session, cmd, cmd_name, cmd_args, protocol, args,
@@ -500,19 +514,30 @@ async def _handle_control_request(
     """
     protocol.emit(request)
 
-    # Wait for the matching control_response from the client
+    # Wait for the matching control_response from the client.
+    # Discard stale responses whose request_id doesn't match — they
+    # are left over from a previous interaction and would cause inner
+    # Claude to receive a mismatched response, silently deadlocking it.
     request_id = request.get("request_id", "")
-    response = await router.read_control_response()
-    if response is None:
-        # Client disconnected — deny
-        return {
-            "type": "control_response",
-            "response": {
-                "request_id": request_id,
-                "allowed": False,
-            },
-        }
-    return response
+    while True:
+        response = await router.read_control_response()
+        if response is None:
+            # Client disconnected — deny
+            return {
+                "type": "control_response",
+                "response": {
+                    "request_id": request_id,
+                    "allowed": False,
+                },
+            }
+        resp_id = response.get("response", {}).get("request_id", "")
+        if resp_id == request_id or not request_id:
+            return response
+        # Mismatched — discard and keep waiting
+        protocol.log(
+            f"Discarded stale control_response "
+            f"(got {resp_id!r}, expected {request_id!r})"
+        )
 
 
 def main_sync() -> None:
