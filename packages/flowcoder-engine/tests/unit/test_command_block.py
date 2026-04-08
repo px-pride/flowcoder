@@ -223,6 +223,76 @@ class TestCommandBlockExecution:
         assert any("not found" in e.result.error for e in result.log if e.result.error)
 
 
+    async def test_command_name_template_resolution(self):
+        """command_name with template variable is resolved before lookup."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _write_command(Path(tmpdir), "test-sub", _simple_sub_command())
+
+            fc = Flowchart(
+                blocks={
+                    "s": StartBlock(id="s"),
+                    "c": CommandBlock(
+                        id="c", command_name="$1",
+                        merge_output=True,
+                    ),
+                    "e": EndBlock(id="e"),
+                },
+                connections=[
+                    Connection(source_id="s", target_id="c"),
+                    Connection(source_id="c", target_id="e"),
+                ],
+            )
+
+            session = MockSession(["Sub response"])
+            proto = MockProtocol()
+            walker = GraphWalker(
+                fc, session, {"$1": "test-sub"}, proto,
+                search_paths=[tmpdir],
+            )
+            result = await walker.run()
+
+            assert result.status == "completed"
+            assert result.variables.get("sub_result") == "done"
+            # Log should show the resolved name, not "$1"
+            assert any("test-sub" in log for log in proto.logs)
+            assert not any("'$1'" in log for log in proto.logs)
+
+    async def test_command_name_var_ref_resolution(self):
+        """command_name with {{var}} is resolved before lookup."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _write_command(Path(tmpdir), "test-sub", _simple_sub_command())
+
+            fc = Flowchart(
+                blocks={
+                    "s": StartBlock(id="s"),
+                    "v": VariableBlock(
+                        id="v", variable_name="cmd_name",
+                        variable_value="test-sub",
+                    ),
+                    "c": CommandBlock(
+                        id="c", command_name="{{cmd_name}}",
+                        merge_output=True,
+                    ),
+                    "e": EndBlock(id="e"),
+                },
+                connections=[
+                    Connection(source_id="s", target_id="v"),
+                    Connection(source_id="v", target_id="c"),
+                    Connection(source_id="c", target_id="e"),
+                ],
+            )
+
+            session = MockSession(["Sub response"])
+            proto = MockProtocol()
+            walker = GraphWalker(
+                fc, session, {}, proto, search_paths=[tmpdir]
+            )
+            result = await walker.run()
+
+            assert result.status == "completed"
+            assert result.variables.get("sub_result") == "done"
+
+
 class TestCommandBlockRecursion:
     async def test_max_depth_exceeded(self):
         """Recursive command block hits max depth."""

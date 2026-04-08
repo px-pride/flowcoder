@@ -481,9 +481,10 @@ class GraphWalker:
         variables, and runs it. Recursion is tracked via the call stack.
         """
         depth = len(self._call_stack)
+        command_name = evaluate_template(block.command_name, self._variables)
         with _tracer.start_as_current_span(
             "flowchart.exec_command",
-            attributes={"command.name": block.command_name, "command.depth": depth},
+            attributes={"command.name": command_name, "command.depth": depth},
         ) as span:
             if depth >= self._max_depth:
                 return BlockResult.fail(
@@ -492,15 +493,15 @@ class GraphWalker:
                 )
 
             # Check for direct recursion (same command already in stack)
-            if block.command_name in self._call_stack:
+            if command_name in self._call_stack:
                 self._protocol.log(
-                    f"WARNING: Recursive call to '{block.command_name}' "
+                    f"WARNING: Recursive call to '{command_name}' "
                     f"(depth {depth}). Stack: {' -> '.join(self._call_stack)}"
                 )
 
             # Resolve the command
             try:
-                cmd = resolve_command(block.command_name, search_paths=self._search_paths)
+                cmd = resolve_command(command_name, search_paths=self._search_paths)
             except CommandNotFoundError as e:
                 span.set_status(trace.StatusCode.ERROR, str(e))
                 return BlockResult.fail(str(e))
@@ -521,7 +522,7 @@ class GraphWalker:
                     child_vars[f"${i}"] = part
 
             self._protocol.log(
-                f"Entering sub-command '{block.command_name}' (depth {depth + 1})"
+                f"Entering sub-command '{command_name}' (depth {depth + 1})"
             )
 
             # Create child walker sharing the same session and protocol
@@ -531,7 +532,7 @@ class GraphWalker:
                 child_vars,
                 self._protocol,
                 max_blocks=self._max_blocks,
-                call_stack=[*self._call_stack, block.command_name],
+                call_stack=[*self._call_stack, command_name],
                 max_depth=self._max_depth,
                 search_paths=self._search_paths,
             )
@@ -539,7 +540,7 @@ class GraphWalker:
             child_result = await child_walker.run()
 
             self._protocol.log(
-                f"Sub-command '{block.command_name}' finished: {child_result.status}"
+                f"Sub-command '{command_name}' finished: {child_result.status}"
             )
 
             if child_result.status != "completed":
@@ -572,8 +573,10 @@ class GraphWalker:
                 f"Wait for it before spawning again."
             )
 
+        command_name = evaluate_template(block.command_name, self._variables)
+
         try:
-            cmd = resolve_command(block.command_name, search_paths=self._search_paths)
+            cmd = resolve_command(command_name, search_paths=self._search_paths)
         except CommandNotFoundError as e:
             return BlockResult.fail(str(e))
 
@@ -599,11 +602,11 @@ class GraphWalker:
             ]
             self._protocol.log(
                 f"Spawning agent '{agent_name}' with model '{block.model}' "
-                f"running command '{block.command_name}'"
+                f"running command '{command_name}'"
             )
         else:
             self._protocol.log(
-                f"Spawning agent '{agent_name}' running command '{block.command_name}'"
+                f"Spawning agent '{agent_name}' running command '{command_name}'"
             )
 
         await child_session.start()
