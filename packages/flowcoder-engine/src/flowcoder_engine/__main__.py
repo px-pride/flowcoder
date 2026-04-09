@@ -474,6 +474,7 @@ async def _run_flowchart_takeover(
                 duration_ms=duration_ms,
                 cost_usd=session.total_cost,
                 blocks_executed=len(result.log),
+                session_id=session.session_id or "",
             )
 
             protocol.emit_result(
@@ -482,23 +483,32 @@ async def _run_flowchart_takeover(
                 duration_ms=duration_ms,
                 num_turns=len(result.log),
                 total_cost_usd=session.total_cost,
+                session_id=session.session_id or "flowchart",
             )
             span.set_attributes({"flowchart.status": result.status, "flowchart.duration_ms": duration_ms})
 
         except ExecutionError as e:
             duration_ms = int((time.monotonic() - start_time) * 1000)
             protocol.emit_flowchart_complete(
-                status="error", duration_ms=duration_ms
+                status="error", duration_ms=duration_ms,
+                session_id=session.session_id or "",
             )
-            protocol.emit_result(str(e), is_error=True)
+            protocol.emit_result(
+                str(e), is_error=True,
+                session_id=session.session_id or "flowchart",
+            )
             span.set_status(trace.StatusCode.ERROR, str(e))
 
         except Exception as e:
             duration_ms = int((time.monotonic() - start_time) * 1000)
             protocol.emit_flowchart_complete(
-                status="error", duration_ms=duration_ms
+                status="error", duration_ms=duration_ms,
+                session_id=session.session_id or "",
             )
-            protocol.emit_result(f"Unexpected error: {e}", is_error=True)
+            protocol.emit_result(
+                f"Unexpected error: {e}", is_error=True,
+                session_id=session.session_id or "flowchart",
+            )
             span.set_status(trace.StatusCode.ERROR, str(e))
 
 

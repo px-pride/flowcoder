@@ -141,6 +141,7 @@ class ProtocolHandler:
         duration_ms: int = 0,
         cost_usd: float = 0.0,
         blocks_executed: int = 0,
+        session_id: str = "",
     ) -> None:
         """Emit flowchart_complete when leaving takeover mode."""
         self.emit_system(
@@ -150,6 +151,7 @@ class ProtocolHandler:
                 "duration_ms": duration_ms,
                 "cost_usd": cost_usd,
                 "blocks_executed": blocks_executed,
+                "session_id": session_id,
             },
         )
 
@@ -160,13 +162,14 @@ class ProtocolHandler:
         duration_ms: int = 0,
         num_turns: int = 0,
         total_cost_usd: float = 0.0,
+        session_id: str = "flowchart",
     ) -> None:
         """Emit a result message (turn completion)."""
         self.emit(
             {
                 "type": "result",
                 "subtype": "error" if is_error else "complete",
-                "session_id": "flowchart",
+                "session_id": session_id,
                 "duration_ms": duration_ms,
                 "duration_api_ms": 0,
                 "is_error": is_error,
