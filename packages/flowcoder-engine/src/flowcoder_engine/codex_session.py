@@ -75,10 +75,11 @@ class CodexSession(BaseSession):
 
         self._client = CodexClient.connect_stdio(cwd=self._cwd)
         await self._client.start()
+        await self._client.initialize()
 
         config = ThreadConfig(
             model=self._model,
-            sandbox="dangerFullAccess",
+            sandbox="danger-full-access",
             cwd=self._cwd,
         )
         self._thread = await self._client.start_thread(config)
@@ -110,7 +111,7 @@ class CodexSession(BaseSession):
 
         config = ThreadConfig(
             model=self._model,
-            sandbox="dangerFullAccess",
+            sandbox="danger-full-access",
             cwd=self._cwd,
         )
         self._thread = await self._client.start_thread(config)
