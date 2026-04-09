@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import secrets
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
@@ -134,6 +135,13 @@ class BaseSession(ABC):
         """Return a new session configured to use a different model."""
         ...
 
+    async def set_permission_mode(self, mode: str) -> None:
+        """Change the permission mode on a running session.
+
+        No-op by default — only backends that support runtime permission
+        changes (e.g. Claude CLI) need to override this.
+        """
+
 
 class ClaudeSession(BaseSession):
     """A single Claude CLI subprocess speaking stream-json protocol."""
@@ -192,6 +200,27 @@ class ClaudeSession(BaseSession):
             protocol=self._protocol,
             control_callback=self._control_callback,
         )
+
+    async def set_permission_mode(self, mode: str) -> None:
+        """Change the permission mode on the running Claude CLI subprocess."""
+        if self._process is None or not self._process.is_running:
+            return
+        request_id = f"req_perm_{secrets.token_hex(4)}"
+        await self._process.write({
+            "type": "control_request",
+            "request_id": request_id,
+            "request": {
+                "subtype": "set_permission_mode",
+                "mode": mode,
+            },
+        })
+        # Read the control_response acknowledgement
+        while True:
+            data = await self._process.read()
+            if data is None:
+                break
+            if data.get("type") == "control_response":
+                break
 
     async def start(self) -> None:
         """Spawn the claude subprocess."""
