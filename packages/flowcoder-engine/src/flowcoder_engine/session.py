@@ -140,6 +140,12 @@ class Session:
                 msg_type = data.get("type")
 
                 if msg_type == "system":
+                    # Forward system messages (e.g. compacting status,
+                    # compact_boundary) so the outer SDK can act on them.
+                    if self._protocol:
+                        self._protocol.emit_forwarded(
+                            data, self.name, block_id, block_name
+                        )
                     continue
 
                 if msg_type == "assistant":
