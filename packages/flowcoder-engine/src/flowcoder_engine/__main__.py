@@ -473,14 +473,17 @@ async def _run_flowchart_takeover(
             search_paths=args.search_paths or [],
         )
 
+        cost_before = session.total_cost
+
         try:
             result = await walker.run()
             duration_ms = int((time.monotonic() - start_time) * 1000)
+            flowchart_cost = session.total_cost - cost_before
 
             protocol.emit_flowchart_complete(
                 status=result.status,
                 duration_ms=duration_ms,
-                cost_usd=session.total_cost,
+                cost_usd=flowchart_cost,
                 blocks_executed=len(result.log),
             )
 
@@ -489,7 +492,7 @@ async def _run_flowchart_takeover(
                 is_error=result.status != "completed",
                 duration_ms=duration_ms,
                 num_turns=len(result.log),
-                total_cost_usd=session.total_cost,
+                total_cost_usd=flowchart_cost,
             )
             span.set_attributes({"flowchart.status": result.status, "flowchart.duration_ms": duration_ms})
 
