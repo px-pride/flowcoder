@@ -84,8 +84,10 @@ class TestEmit:
             p.emit_result("done", is_error=False, duration_ms=500)
         msg = json.loads(captured.getvalue().strip())
         assert msg["type"] == "result"
+        assert msg["subtype"] == "success"
         assert msg["result"] == "done"
         assert msg["is_error"] is False
+        assert "uuid" in msg and len(msg["uuid"]) == 32
 
 
 class TestInboxQueue:

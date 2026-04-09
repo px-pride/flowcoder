@@ -247,7 +247,14 @@ async def main() -> None:
     cwd = args.cwd or os.getcwd()
     if use_codex:
         session = CodexSession("main", cwd=cwd)
-        await session.start()
+        try:
+            await session.start()
+        except ImportError:
+            protocol.log(
+                "Error: codex backend requires 'codex-app-server-sdk'. "
+                "Install it with: pip install codex-app-server-sdk"
+            )
+            sys.exit(1)
         protocol.log("Codex session started")
     else:
         assert process is not None

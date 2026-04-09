@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import uuid
 from typing import Any
 
 
@@ -168,7 +169,8 @@ class ProtocolHandler:
         self.emit(
             {
                 "type": "result",
-                "subtype": "error" if is_error else "complete",
+                "subtype": "error" if is_error else "success",
+                "uuid": uuid.uuid4().hex,
                 "session_id": session_id,
                 "duration_ms": duration_ms,
                 "duration_api_ms": 0,
