@@ -28,10 +28,16 @@ class TestParseArgs:
 
     def test_passthrough_args(self):
         """Unknown args are collected for pass-through to inner claude."""
+        args = parse_args(["--some-unknown-flag", "value"])
+        assert "--some-unknown-flag" in args.passthrough
+        assert "value" in args.passthrough
+
+    def test_known_args_not_in_passthrough(self):
+        """Explicitly parsed args are NOT in passthrough."""
         args = parse_args(["--model", "haiku", "--verbose"])
-        assert "--model" in args.passthrough
-        assert "haiku" in args.passthrough
-        assert "--verbose" in args.passthrough
+        assert args.model == "haiku"
+        assert args.verbose is True
+        assert "--model" not in args.passthrough
 
     def test_mixed_own_and_passthrough(self):
         args = parse_args([
@@ -42,9 +48,20 @@ class TestParseArgs:
         ])
         assert args.search_paths == ["/cmds"]
         assert args.max_blocks == 50
-        assert "--model" in args.passthrough
-        assert "opus" in args.passthrough
-        assert "--system-prompt" in args.passthrough
+        assert args.model == "opus"
+        assert args.system_prompt == "test"
+
+    def test_backend_default(self):
+        args = parse_args([])
+        assert args.backend == "claude"
+
+    def test_backend_codex(self):
+        args = parse_args(["--backend", "codex"])
+        assert args.backend == "codex"
+
+    def test_backend_invalid(self):
+        with pytest.raises(SystemExit):
+            parse_args(["--backend", "invalid"])
 
 
 class TestBuildVariables:

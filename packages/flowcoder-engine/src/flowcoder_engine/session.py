@@ -1,8 +1,7 @@
-"""Session — a single Claude CLI subprocess.
+"""Session — manages AI subprocess lifecycles.
 
-Manages the lifecycle of one Claude process: start, query, stop.
-Forwards inner claude messages (assistant, stream_event) to the outer
-protocol handler.
+BaseSession defines the backend-agnostic interface.
+ClaudeSession implements it for the Claude CLI (stream-json protocol).
 
 Uses the inline ClaudeProcess for subprocess management.
 """
@@ -12,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
@@ -67,7 +67,75 @@ def _clean_env() -> dict[str, str]:
     return env
 
 
-class Session:
+class BaseSession(ABC):
+    """Backend-agnostic session interface.
+
+    All session implementations (ClaudeSession, future CodexSession, etc.)
+    must implement these methods.  Walker and other engine components
+    depend only on this interface.
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Human-readable session name (e.g. 'main', 'spawned-lint')."""
+        ...
+
+    @property
+    @abstractmethod
+    def session_id(self) -> str | None:
+        """Backend-assigned session ID, or None if not yet started."""
+        ...
+
+    @property
+    @abstractmethod
+    def total_cost(self) -> float:
+        """Cumulative cost in USD across all queries in this session."""
+        ...
+
+    @property
+    @abstractmethod
+    def is_running(self) -> bool:
+        """Whether the underlying subprocess is alive."""
+        ...
+
+    @abstractmethod
+    def clone(self, name: str) -> BaseSession:
+        """Create a new session with the same config but a different name."""
+        ...
+
+    @abstractmethod
+    async def start(self) -> None:
+        """Spawn the backend subprocess."""
+        ...
+
+    @abstractmethod
+    async def query(
+        self,
+        prompt: str,
+        block_id: str = "",
+        block_name: str = "",
+    ) -> QueryResult:
+        """Send a prompt and return the complete response."""
+        ...
+
+    @abstractmethod
+    async def clear(self) -> None:
+        """Clear conversation history (typically by restarting)."""
+        ...
+
+    @abstractmethod
+    async def stop(self) -> None:
+        """Terminate the subprocess."""
+        ...
+
+    @abstractmethod
+    def with_model(self, model: str) -> BaseSession:
+        """Return a new session configured to use a different model."""
+        ...
+
+
+class ClaudeSession(BaseSession):
     """A single Claude CLI subprocess speaking stream-json protocol."""
 
     def __init__(
@@ -77,20 +145,50 @@ class Session:
         protocol: ProtocolHandler | None = None,
         control_callback: ControlCallback | None = None,
     ) -> None:
-        self.name = name
-        self.session_id: str | None = None
-        self.total_cost: float = 0.0
+        self._name = name
+        self._session_id: str | None = None
+        self._total_cost: float = 0.0
         self._claude_cmd = claude_cmd
         self._protocol = protocol
         self._control_callback = control_callback
         self._process: ClaudeProcess | None = None
         self._stderr_task: asyncio.Task[None] | None = None
 
-    def clone(self, name: str) -> Session:
-        """Create a new Session with the same config but a different name."""
-        return Session(
+    # -- BaseSession properties --
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def session_id(self) -> str | None:
+        return self._session_id
+
+    @property
+    def total_cost(self) -> float:
+        return self._total_cost
+
+    def clone(self, name: str) -> ClaudeSession:
+        """Create a new ClaudeSession with the same config but a different name."""
+        return ClaudeSession(
             name=name,
             claude_cmd=list(self._claude_cmd),
+            protocol=self._protocol,
+            control_callback=self._control_callback,
+        )
+
+    def with_model(self, model: str) -> ClaudeSession:
+        """Return a new ClaudeSession configured to use a different model."""
+        cmd = list(self._claude_cmd)
+        # Replace or append --model flag
+        if "--model" in cmd:
+            idx = cmd.index("--model")
+            cmd[idx + 1] = model
+        else:
+            cmd.extend(["--model", model])
+        return ClaudeSession(
+            name=self._name,
+            claude_cmd=cmd,
             protocol=self._protocol,
             control_callback=self._control_callback,
         )
@@ -189,10 +287,10 @@ class Session:
                     )
                     result.cost_usd = data.get("total_cost_usd", 0.0)
                     result.duration_ms = data.get("duration_ms", 0)
-                    self.total_cost += result.cost_usd
+                    self._total_cost += result.cost_usd
 
                     if data.get("session_id"):
-                        self.session_id = data["session_id"]
+                        self._session_id = data["session_id"]
                     break
 
             if not result.response_text and response_parts:
@@ -260,3 +358,7 @@ class Session:
     @property
     def is_running(self) -> bool:
         return self._process is not None and self._process.is_running
+
+
+# Backwards-compatible alias so existing imports keep working.
+Session = ClaudeSession

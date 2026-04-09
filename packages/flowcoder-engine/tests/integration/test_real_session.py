@@ -13,7 +13,7 @@ import os
 import shutil
 
 import pytest
-from flowcoder_engine.session import Session
+from flowcoder_engine.session import ClaudeSession as Session
 from flowcoder_engine.walker import GraphWalker
 from flowcoder_flowchart import (
     Connection,

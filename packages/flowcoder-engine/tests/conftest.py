@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from flowcoder_engine.session import QueryResult
+from flowcoder_engine.session import BaseSession, QueryResult
 from flowcoder_flowchart import (
     BashBlock,
     BranchBlock,
@@ -20,16 +20,43 @@ from flowcoder_flowchart import (
 )
 
 
-class MockSession:
+class MockSession(BaseSession):
     """Mock session for unit testing the walker."""
 
     def __init__(self, responses: list[str] | None = None):
-        self.name = "mock"
-        self.session_id = "mock-session"
-        self.total_cost = 0.0
+        self._name = "mock"
+        self._session_id: str | None = "mock-session"
+        self._total_cost = 0.0
         self._responses = list(responses or ["Mock response"])
         self._call_count = 0
         self._clear_count = 0
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def session_id(self) -> str | None:
+        return self._session_id
+
+    @property
+    def total_cost(self) -> float:
+        return self._total_cost
+
+    @property
+    def is_running(self) -> bool:
+        return True
+
+    def clone(self, name: str) -> MockSession:
+        ms = MockSession(responses=list(self._responses))
+        ms._name = name
+        return ms
+
+    def with_model(self, model: str) -> MockSession:
+        return self.clone(self._name)
+
+    async def start(self) -> None:
+        pass
 
     async def query(
         self, prompt: str, block_id: str = "", block_name: str = ""
@@ -45,10 +72,6 @@ class MockSession:
 
     async def stop(self) -> None:
         pass
-
-    @property
-    def is_running(self) -> bool:
-        return True
 
 
 class MockProtocol:
