@@ -51,6 +51,7 @@ from .codex_session import CodexSession
 from .protocol import ProtocolHandler
 from .resolver import CommandNotFoundError, resolve_command
 from .session import BaseSession, ClaudeSession
+from .session_factory import SessionFactory
 from .subprocess import ClaudeProcess, find_claude
 from .walker import ExecutionError, GraphWalker
 
@@ -243,8 +244,9 @@ async def main() -> None:
 
     # Build session for flowchart execution.
     session: BaseSession
+    cwd = args.cwd or os.getcwd()
     if use_codex:
-        session = CodexSession("main", cwd=args.cwd or os.getcwd())
+        session = CodexSession("main", cwd=cwd)
         await session.start()
         protocol.log("Codex session started")
     else:
@@ -259,6 +261,24 @@ async def main() -> None:
         )
         # Attach the already-running process to the session
         session._process = process  # type: ignore[attr-defined]
+
+    # Build session factory for cross-backend spawning.
+    factory = SessionFactory()
+    factory.register(
+        "codex",
+        lambda name, model: CodexSession(name=name, model=model, cwd=cwd),
+    )
+    if not use_codex and claude_cmd:
+        factory.register(
+            "claude",
+            lambda name, model: (
+                ClaudeSession(
+                    name=name,
+                    claude_cmd=[*claude_cmd, "--model", model] if model else list(claude_cmd),
+                    protocol=protocol,
+                )
+            ),
+        )
 
     try:
         while not shutdown_event.is_set():
@@ -319,7 +339,7 @@ async def main() -> None:
 
                         protocol.log(f"Flowchart takeover: /{cmd_name} {cmd_args}")
                         await _run_flowchart_takeover(
-                            session, cmd, cmd_name, cmd_args, protocol, args,
+                            session, cmd, cmd_name, cmd_args, protocol, args, factory,
                         )
                     else:
                         if use_codex:
@@ -449,6 +469,7 @@ async def _run_flowchart_takeover(
     cmd_args: str,
     protocol: ProtocolHandler,
     args: object,
+    session_factory: SessionFactory | None = None,
 ) -> None:
     """Execute a flowchart command in takeover mode."""
     block_count = len(cmd.flowchart.blocks)
@@ -485,6 +506,7 @@ async def _run_flowchart_takeover(
             protocol,
             max_blocks=args.max_blocks,
             search_paths=args.search_paths or [],
+            session_factory=session_factory,
         )
 
         cost_before = session.total_cost

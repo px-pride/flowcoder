@@ -124,6 +124,7 @@ class SpawnBlock(BlockBase):
     exit_code_variable: str | None = None
     config_file: str | None = None
     model: str | None = None
+    backend: str | None = None
 
 
 class WaitBlock(BlockBase):

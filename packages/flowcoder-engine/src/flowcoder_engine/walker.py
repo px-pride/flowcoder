@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
     from .protocol import ProtocolHandler
     from .session import BaseSession
+    from .session_factory import SessionFactory
 
 logger = logging.getLogger(__name__)
 _tracer = trace.get_tracer(__name__)
@@ -181,6 +182,7 @@ class GraphWalker:
         call_stack: list[str] | None = None,
         max_depth: int = MAX_RECURSION_DEPTH,
         search_paths: list[str | Path] | None = None,
+        session_factory: SessionFactory | None = None,
     ) -> None:
         self._flowchart = flowchart
         self._session = session
@@ -193,6 +195,7 @@ class GraphWalker:
         self._call_stack = call_stack or []
         self._max_depth = max_depth
         self._search_paths = search_paths or []
+        self._session_factory = session_factory
         self._spawned_sessions: dict[str, BaseSession] = {}
         self._spawned_tasks: dict[str, asyncio.Task[ExecutionResult]] = {}
         self._spawned_results: dict[str, ExecutionResult] = {}
@@ -535,6 +538,7 @@ class GraphWalker:
                 call_stack=[*self._call_stack, command_name],
                 max_depth=self._max_depth,
                 search_paths=self._search_paths,
+                session_factory=self._session_factory,
             )
 
             child_result = await child_walker.run()
@@ -593,7 +597,16 @@ class GraphWalker:
             for i, part in enumerate(parts, 1):
                 child_vars[f"${i}"] = part
 
-        if block.model:
+        if block.backend and self._session_factory:
+            child_session = self._session_factory.create(
+                block.backend, agent_name, block.model
+            )
+            self._protocol.log(
+                f"Spawning agent '{agent_name}' with backend '{block.backend}'"
+                f"{f' model {block.model!r}' if block.model else ''} "
+                f"running command '{command_name}'"
+            )
+        elif block.model:
             child_session = self._session.with_model(block.model).clone(agent_name)
             self._protocol.log(
                 f"Spawning agent '{agent_name}' with model '{block.model}' "
@@ -616,6 +629,7 @@ class GraphWalker:
             call_stack=[*self._call_stack, f"spawn:{block.command_name}"],
             max_depth=self._max_depth,
             search_paths=self._search_paths,
+            session_factory=self._session_factory,
         )
 
         task = asyncio.create_task(child_walker.run())
