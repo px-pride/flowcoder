@@ -156,6 +156,7 @@ class ClaudeSession(BaseSession):
         self._name = name
         self._session_id: str | None = None
         self._total_cost: float = 0.0
+        self._last_cli_cost: float = 0.0
         self._claude_cmd = claude_cmd
         self._protocol = protocol
         self._control_callback = control_callback
@@ -314,7 +315,9 @@ class ClaudeSession(BaseSession):
                         if response_parts
                         else data.get("result", "")
                     )
-                    result.cost_usd = data.get("total_cost_usd", 0.0)
+                    cli_cost = data.get("total_cost_usd", 0.0)
+                    result.cost_usd = cli_cost - self._last_cli_cost
+                    self._last_cli_cost = cli_cost
                     result.duration_ms = data.get("duration_ms", 0)
                     self._total_cost += result.cost_usd
 
@@ -367,6 +370,7 @@ class ClaudeSession(BaseSession):
         Cost tracking is preserved across restarts.
         """
         _tracer.start_span("session.clear", attributes={"session.name": self.name}).end()
+        self._last_cli_cost = 0.0
         await self.stop()
         await self.start()
 
