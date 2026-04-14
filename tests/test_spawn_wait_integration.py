@@ -492,11 +492,11 @@ class TestSpawnWaitClaude:
         # Create a real session
         session = Session(
             name="test",
-            claude_path=self.CLAUDE_PATH,
-            opts={
-                "model": "claude-haiku-4-5-20251001",
-                "max_turns": "1",
-            },
+            claude_cmd=[
+                self.CLAUDE_PATH,
+                "--model", "claude-haiku-4-5-20251001",
+                "--max-turns", "1",
+            ],
             protocol=MockProtocol(),
         )
 
@@ -565,11 +565,11 @@ class TestSpawnWaitClaude:
         # The key is that a *separate* Session is created for the spawned agent
         session = Session(
             name="test-parent",
-            claude_path=self.CLAUDE_PATH,
-            opts={
-                "model": "claude-haiku-4-5-20251001",
-                "max_turns": "1",
-            },
+            claude_cmd=[
+                self.CLAUDE_PATH,
+                "--model", "claude-haiku-4-5-20251001",
+                "--max-turns", "1",
+            ],
             protocol=MockProtocol(),
         )
 
