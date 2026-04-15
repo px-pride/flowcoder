@@ -17,6 +17,21 @@ log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from codex_app_server_sdk import CodexClient, ThreadHandle
 
+_DEFAULT_BASE_INSTRUCTIONS = """\
+You are operating inside a flowchart execution system. You have filesystem and \
+shell access for work tasks.
+
+Some prompts you receive reference services that are NOT available in this \
+environment (Discord API, MCP tools, custom CLIs like set_channel_status or \
+minflow). If a prompt asks you to call a tool or service that is not available:
+- Do NOT run shell commands to approximate the unavailable tool.
+- Instead, output exactly: {"status": "skipped", "reason": "tool not available"}
+- If the prompt says "do not output any text" but the requested tool is \
+unavailable, override that restriction and output the JSON above anyway.
+
+For all other requests, respond normally.\
+"""
+
 
 class CodexSession(BaseSession):
     """A Codex session using the native Python SDK."""
@@ -26,10 +41,12 @@ class CodexSession(BaseSession):
         name: str,
         model: str | None = None,
         cwd: str | None = None,
+        base_instructions: str | None = None,
     ) -> None:
         self._name = name
         self._model = model
         self._cwd = cwd or os.getcwd()
+        self._base_instructions = base_instructions or _DEFAULT_BASE_INSTRUCTIONS
         self._session_id: str | None = None
         self._total_cost: float = 0.0
         self._client: CodexClient | None = None
@@ -60,6 +77,7 @@ class CodexSession(BaseSession):
             name=name,
             model=self._model,
             cwd=self._cwd,
+            base_instructions=self._base_instructions,
         )
 
     def with_model(self, model: str) -> CodexSession:
@@ -67,6 +85,7 @@ class CodexSession(BaseSession):
             name=self._name,
             model=model,
             cwd=self._cwd,
+            base_instructions=self._base_instructions,
         )
 
     async def start(self) -> None:
@@ -81,6 +100,7 @@ class CodexSession(BaseSession):
             model=self._model,
             sandbox="danger-full-access",
             cwd=self._cwd,
+            base_instructions=self._base_instructions,
         )
         self._thread = await self._client.start_thread(config)
         self._session_id = self._thread.thread_id
@@ -113,6 +133,7 @@ class CodexSession(BaseSession):
             model=self._model,
             sandbox="danger-full-access",
             cwd=self._cwd,
+            base_instructions=self._base_instructions,
         )
         self._thread = await self._client.start_thread(config)
         self._session_id = self._thread.thread_id

@@ -246,7 +246,7 @@ async def main() -> None:
     session: BaseSession
     cwd = args.cwd or os.getcwd()
     if use_codex:
-        session = CodexSession("main", cwd=cwd)
+        session = CodexSession("main", model=args.model, cwd=cwd)
         try:
             await session.start()
         except ImportError:
