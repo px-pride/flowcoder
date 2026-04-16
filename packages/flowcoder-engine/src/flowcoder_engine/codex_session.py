@@ -1,7 +1,7 @@
 """CodexSession — wraps the codex-app-server-sdk Python package.
 
 Uses CodexClient.connect_stdio() to spawn the codex app-server process,
-then communicates via ThreadHandle.chat() streaming iterator.
+then communicates via ThreadHandle.chat_once().
 """
 
 from __future__ import annotations
@@ -20,8 +20,6 @@ _tracer = trace.get_tracer(__name__)
 
 if TYPE_CHECKING:
     from codex_app_server_sdk import CodexClient, ThreadHandle
-
-    from .protocol import ProtocolHandler
 
 # Map Claude CLI permission modes to Codex approval policies.
 _PERMISSION_TO_APPROVAL: dict[str, str] = {
@@ -56,7 +54,6 @@ class CodexSession(BaseSession):
         base_instructions: str | None = None,
         sandbox: str | None = None,
         approval_policy: str | None = None,
-        protocol: ProtocolHandler | None = None,
     ) -> None:
         self._name = name
         self._model = model
@@ -64,7 +61,6 @@ class CodexSession(BaseSession):
         self._base_instructions = base_instructions or _DEFAULT_BASE_INSTRUCTIONS
         self._sandbox: str = sandbox or "danger-full-access"
         self._approval_policy = approval_policy
-        self._protocol = protocol
         self._session_id: str | None = None
         self._total_cost: float = 0.0
         self._client: CodexClient | None = None
@@ -98,7 +94,6 @@ class CodexSession(BaseSession):
             base_instructions=self._base_instructions,
             sandbox=self._sandbox,
             approval_policy=self._approval_policy,
-            protocol=self._protocol,
         )
 
     def with_model(self, model: str) -> CodexSession:
@@ -109,7 +104,6 @@ class CodexSession(BaseSession):
             base_instructions=self._base_instructions,
             sandbox=self._sandbox,
             approval_policy=self._approval_policy,
-            protocol=self._protocol,
         )
 
     def _build_thread_config(self) -> Any:
@@ -149,7 +143,7 @@ class CodexSession(BaseSession):
         block_id: str = "",
         block_name: str = "",
     ) -> QueryResult:
-        """Send a prompt and stream ConversationStep events until complete."""
+        """Send a prompt to the Codex thread and return the result."""
         with _tracer.start_as_current_span(
             "session.query",
             attributes={
@@ -164,22 +158,7 @@ class CodexSession(BaseSession):
             try:
                 from codex_app_server_sdk import CodexError
 
-                final_text = ""
-                async for step in self._thread.chat(prompt):
-                    # Forward each step to the protocol handler for
-                    # streaming visibility (thinking, exec, tool, etc.)
-                    if self._protocol:
-                        self._protocol.emit_forwarded(
-                            _step_to_message(step),
-                            self.name,
-                            block_id,
-                            block_name,
-                        )
-
-                    # Capture the last agentMessage as the final response
-                    if step.step_type == "codex" and step.text:
-                        final_text = step.text
-
+                result = await self._thread.chat_once(prompt)
             except CodexError as e:
                 duration_ms = int((time.monotonic() - start_time) * 1000)
                 span.set_status(trace.StatusCode.ERROR, str(e))
@@ -192,7 +171,7 @@ class CodexSession(BaseSession):
             duration_ms = int((time.monotonic() - start_time) * 1000)
             span.set_attributes({"session.duration_ms": duration_ms})
             return QueryResult(
-                response_text=final_text,
+                response_text=result.final_text or "",
                 duration_ms=duration_ms,
             )
 
@@ -237,29 +216,3 @@ class CodexSession(BaseSession):
             await self._client.close()
             self._client = None
         self._thread = None
-
-
-def _step_to_message(step: Any) -> dict[str, Any]:
-    """Convert a ConversationStep to a synthetic message for emit_forwarded.
-
-    Produces a format compatible with the protocol handler's session_message
-    wrapper.  The step_type field ("thinking", "exec", "codex", "tool",
-    "file") lets consumers distinguish step kinds.
-    """
-    if step.step_type == "codex":
-        # Final assistant response — format like a Claude assistant message
-        # so existing protocol consumers can parse it.
-        return {
-            "type": "assistant",
-            "message": {
-                "role": "assistant",
-                "content": [{"type": "text", "text": step.text or ""}],
-            },
-        }
-    # All other step types (thinking, exec, tool, file)
-    return {
-        "type": "stream_event",
-        "step_type": step.step_type,
-        "item_type": step.item_type,
-        "text": step.text or "",
-    }
