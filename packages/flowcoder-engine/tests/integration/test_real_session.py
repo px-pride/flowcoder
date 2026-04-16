@@ -36,14 +36,14 @@ _IN_CLAUDE_SESSION = bool(os.environ.get("CLAUDECODE"))
 
 pytestmark = [
     pytest.mark.skipif(not _CLAUDE_PATH, reason=_SKIP_REASON),
+    pytest.mark.skipif(_IN_CLAUDE_SESSION, reason="nested claude sessions hang"),
     pytest.mark.integration,
 ]
 
-# Common opts for all test sessions
-_TEST_OPTS = {
-    "model": "haiku",
-    "max_budget_usd": "0.05",
-}
+# Build claude command with test options (haiku model, low budget)
+_CLAUDE_CMD = (
+    [_CLAUDE_PATH, "--model", "haiku", "--max-turns", "3"] if _CLAUDE_PATH else []
+)
 
 
 # ── Session-level tests ──────────────────────────────────────────────
@@ -54,7 +54,7 @@ class TestRealSession:
 
     async def test_basic_query(self):
         """Session can send a prompt and get a response."""
-        session = Session("test", _CLAUDE_PATH, _TEST_OPTS)
+        session = Session("test", _CLAUDE_CMD)
         try:
             await session.start()
             assert session.is_running
@@ -72,7 +72,7 @@ class TestRealSession:
 
     async def test_session_tracks_cost(self):
         """Session accumulates total_cost across queries."""
-        session = Session("test", _CLAUDE_PATH, _TEST_OPTS)
+        session = Session("test", _CLAUDE_CMD)
         try:
             await session.start()
             await session.query("Reply with the number 1")
@@ -87,7 +87,7 @@ class TestRealSession:
     async def test_message_forwarding(self):
         """Protocol receives forwarded assistant messages."""
         proto = MockProtocol()
-        session = Session("test", _CLAUDE_PATH, _TEST_OPTS, protocol=proto)
+        session = Session("test", _CLAUDE_CMD, protocol=proto)
         try:
             await session.start()
             await session.query(
@@ -107,11 +107,12 @@ class TestRealSession:
 
     async def test_system_prompt(self):
         """Session respects system_prompt option."""
-        opts = {
-            **_TEST_OPTS,
-            "system_prompt": "You are a calculator. Only output numbers. No text.",
-        }
-        session = Session("calc", _CLAUDE_PATH, opts)
+        cmd = [
+            *_CLAUDE_CMD,
+            "--system-prompt",
+            "You are a calculator. Only output numbers. No text.",
+        ]
+        session = Session("calc", cmd)
         try:
             await session.start()
             result = await session.query("What is 2 + 3?")
@@ -145,7 +146,7 @@ class TestRealWalker:
         )
 
         proto = MockProtocol()
-        session = Session("test", _CLAUDE_PATH, _TEST_OPTS, protocol=proto)
+        session = Session("test", _CLAUDE_CMD, protocol=proto)
         try:
             await session.start()
             walker = GraphWalker(fc, session, {}, proto)
@@ -182,7 +183,7 @@ class TestRealWalker:
         )
 
         proto = MockProtocol()
-        session = Session("test", _CLAUDE_PATH, _TEST_OPTS, protocol=proto)
+        session = Session("test", _CLAUDE_CMD, protocol=proto)
         try:
             await session.start()
             walker = GraphWalker(fc, session, {}, proto)
@@ -210,7 +211,7 @@ class TestRealWalker:
         )
 
         proto = MockProtocol()
-        session = Session("test", _CLAUDE_PATH, _TEST_OPTS, protocol=proto)
+        session = Session("test", _CLAUDE_CMD, protocol=proto)
         try:
             await session.start()
             walker = GraphWalker(fc, session, {"$1": "FLAMINGO"}, proto)
@@ -235,7 +236,7 @@ class TestRealWalker:
         )
 
         proto = MockProtocol()
-        session = Session("test", _CLAUDE_PATH, _TEST_OPTS, protocol=proto)
+        session = Session("test", _CLAUDE_CMD, protocol=proto)
         try:
             await session.start()
             walker = GraphWalker(fc, session, {}, proto)
