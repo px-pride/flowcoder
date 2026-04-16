@@ -261,6 +261,9 @@ async def main() -> None:
             sandbox="danger-full-access",
             approval_policy=codex_approval,
             protocol=protocol,
+            control_callback=lambda req: _handle_control_request(
+                req, protocol, router,
+            ),
         )
         try:
             await session.start()
@@ -296,6 +299,9 @@ async def main() -> None:
             sandbox="danger-full-access",
             approval_policy=codex_approval,
             protocol=protocol,
+            control_callback=lambda req: _handle_control_request(
+                req, protocol, router,
+            ),
         ),
     )
     if not use_codex and claude_cmd:

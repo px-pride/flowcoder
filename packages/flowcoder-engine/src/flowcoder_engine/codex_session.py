@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from opentelemetry import trace
 
-from .session import BaseSession, QueryResult
+from .session import BaseSession, ControlCallback, QueryResult
 
 log = logging.getLogger(__name__)
 _tracer = trace.get_tracer(__name__)
@@ -57,6 +57,7 @@ class CodexSession(BaseSession):
         sandbox: str | None = None,
         approval_policy: str | None = None,
         protocol: ProtocolHandler | None = None,
+        control_callback: ControlCallback | None = None,
     ) -> None:
         self._name = name
         self._model = model
@@ -65,6 +66,7 @@ class CodexSession(BaseSession):
         self._sandbox: str = sandbox or "danger-full-access"
         self._approval_policy = approval_policy
         self._protocol = protocol
+        self._control_callback = control_callback
         self._session_id: str | None = None
         self._total_cost: float = 0.0
         self._client: CodexClient | None = None
@@ -99,6 +101,7 @@ class CodexSession(BaseSession):
             sandbox=self._sandbox,
             approval_policy=self._approval_policy,
             protocol=self._protocol,
+            control_callback=self._control_callback,
         )
 
     def with_model(self, model: str) -> CodexSession:
@@ -110,6 +113,7 @@ class CodexSession(BaseSession):
             sandbox=self._sandbox,
             approval_policy=self._approval_policy,
             protocol=self._protocol,
+            control_callback=self._control_callback,
         )
 
     def _build_thread_config(self) -> Any:
@@ -134,6 +138,9 @@ class CodexSession(BaseSession):
             self._client = CodexClient.connect_stdio(cwd=self._cwd)
             await self._client.start()
             await self._client.initialize()
+
+            if self._control_callback:
+                self._client.set_approval_handler(self._handle_approval)
 
             config = self._build_thread_config()
             self._thread = await self._client.start_thread(config)
@@ -212,6 +219,54 @@ class CodexSession(BaseSession):
         await self._thread.update_defaults(
             ThreadConfig(approval_policy=approval_policy),
         )
+
+    async def _handle_approval(self, request: Any) -> Any:
+        """Translate a Codex ApprovalRequest to a control_callback round-trip.
+
+        Converts the SDK's CommandApprovalRequest/FileChangeApprovalRequest
+        into a Claude-style control_request dict, calls the control_callback,
+        and translates the response back into a Codex approval decision.
+        """
+        from codex_app_server_sdk import (
+            CommandApprovalRequest,
+            FileChangeApprovalRequest,
+        )
+
+        assert self._control_callback is not None
+
+        # Build a Claude-style control_request from the Codex approval request.
+        if isinstance(request, CommandApprovalRequest):
+            control_request: dict[str, Any] = {
+                "type": "control_request",
+                "request_id": str(request.request_id),
+                "request": {
+                    "subtype": "tool_permission_request",
+                    "command": request.command or "",
+                    "cwd": request.cwd or self._cwd,
+                    "reason": request.reason or "",
+                },
+            }
+        elif isinstance(request, FileChangeApprovalRequest):
+            control_request = {
+                "type": "control_request",
+                "request_id": str(request.request_id),
+                "request": {
+                    "subtype": "file_change_permission_request",
+                    "grant_root": request.grant_root or "",
+                    "reason": request.reason or "",
+                },
+            }
+        else:
+            log.warning(
+                "CodexSession: unknown approval request type %s, declining",
+                type(request).__name__,
+            )
+            return "decline"
+
+        response = await self._control_callback(control_request)
+
+        allowed = response.get("response", {}).get("allowed", False)
+        return "accept" if allowed else "decline"
 
     async def clear(self) -> None:
         """Clear conversation by creating a new thread."""

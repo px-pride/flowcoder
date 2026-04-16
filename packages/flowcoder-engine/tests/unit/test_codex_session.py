@@ -51,6 +51,18 @@ class TestCodexSessionClone:
         assert new._model == "o3"
         assert session._model == "gpt-4o"
 
+    def test_clone_preserves_control_callback(self):
+        cb = AsyncMock()
+        session = CodexSession("test", control_callback=cb)
+        cloned = session.clone("worker")
+        assert cloned._control_callback is cb
+
+    def test_with_model_preserves_control_callback(self):
+        cb = AsyncMock()
+        session = CodexSession("test", control_callback=cb)
+        new = session.with_model("gpt-4o")
+        assert new._control_callback is cb
+
 
 class MockStep:
     """Mimics codex_app_server_sdk.ConversationStep."""
@@ -174,3 +186,103 @@ class TestCodexSessionWithMock:
         assert session._thread is new_thread
         assert session.session_id == "new-thread-456"
         mock_client.start_thread.await_count == 1
+
+
+class TestCodexApprovalHandler:
+    """Test _handle_approval translation between Codex and Claude formats.
+
+    NOTE: These are API-contract tests only — they verify the translation
+    logic using mock objects, not real Codex approval flow.
+    """
+
+    @pytest.fixture
+    def session_with_callback(self):
+        cb = AsyncMock()
+        session = CodexSession("test-approval", control_callback=cb)
+        session._cwd = "/work"
+        return session, cb
+
+    @pytest.mark.asyncio
+    async def test_command_approval_accepted(self, session_with_callback):
+        from codex_app_server_sdk import CommandApprovalRequest
+
+        session, cb = session_with_callback
+        cb.return_value = {"response": {"request_id": "1", "allowed": True}}
+
+        req = CommandApprovalRequest(
+            request_id=1,
+            thread_id="t1",
+            turn_id="turn1",
+            item_id="item1",
+            command="rm -rf /tmp/junk",
+            cwd="/work",
+            reason="cleanup",
+        )
+        decision = await session._handle_approval(req)
+
+        assert decision == "accept"
+        cb.assert_awaited_once()
+        call_arg = cb.call_args[0][0]
+        assert call_arg["type"] == "control_request"
+        assert call_arg["request_id"] == "1"
+        assert call_arg["request"]["subtype"] == "tool_permission_request"
+        assert call_arg["request"]["command"] == "rm -rf /tmp/junk"
+
+    @pytest.mark.asyncio
+    async def test_command_approval_declined(self, session_with_callback):
+        from codex_app_server_sdk import CommandApprovalRequest
+
+        session, cb = session_with_callback
+        cb.return_value = {"response": {"request_id": "2", "allowed": False}}
+
+        req = CommandApprovalRequest(
+            request_id=2,
+            thread_id="t1",
+            turn_id="turn1",
+            item_id="item1",
+            command="dangerous-cmd",
+        )
+        decision = await session._handle_approval(req)
+
+        assert decision == "decline"
+
+    @pytest.mark.asyncio
+    async def test_file_change_approval_accepted(self, session_with_callback):
+        from codex_app_server_sdk import FileChangeApprovalRequest
+
+        session, cb = session_with_callback
+        cb.return_value = {"response": {"request_id": "3", "allowed": True}}
+
+        req = FileChangeApprovalRequest(
+            request_id=3,
+            thread_id="t1",
+            turn_id="turn1",
+            item_id="item1",
+            grant_root="/home/user/project",
+            reason="write config",
+        )
+        decision = await session._handle_approval(req)
+
+        assert decision == "accept"
+        call_arg = cb.call_args[0][0]
+        assert call_arg["request"]["subtype"] == "file_change_permission_request"
+        assert call_arg["request"]["grant_root"] == "/home/user/project"
+
+    @pytest.mark.asyncio
+    async def test_command_null_fields_use_defaults(self, session_with_callback):
+        from codex_app_server_sdk import CommandApprovalRequest
+
+        session, cb = session_with_callback
+        cb.return_value = {"response": {"request_id": "4", "allowed": True}}
+
+        req = CommandApprovalRequest(
+            request_id=4,
+            thread_id="t1",
+            turn_id="turn1",
+            item_id="item1",
+        )
+        await session._handle_approval(req)
+
+        call_arg = cb.call_args[0][0]
+        assert call_arg["request"]["command"] == ""
+        assert call_arg["request"]["cwd"] == "/work"  # falls back to session cwd
