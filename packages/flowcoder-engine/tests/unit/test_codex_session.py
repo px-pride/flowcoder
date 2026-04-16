@@ -52,17 +52,39 @@ class TestCodexSessionClone:
         assert session._model == "gpt-4o"
 
 
-class MockChatResult:
-    """Mimics codex_app_server_sdk.ChatResult."""
+class MockStep:
+    """Mimics codex_app_server_sdk.ConversationStep."""
 
-    def __init__(self, final_text: str | None = None, thread_id: str = "t-1", turn_id: str = "turn-1"):
-        self.final_text = final_text
-        self.thread_id = thread_id
-        self.turn_id = turn_id
+    def __init__(
+        self,
+        step_type: str = "codex",
+        item_type: str | None = "agentMessage",
+        text: str | None = None,
+        data: dict | None = None,
+    ):
+        self.step_type = step_type
+        self.item_type = item_type
+        self.text = text
+        self.data = data or {}
+
+
+def _make_chat_iterator(*steps):
+    """Create an async iterator that yields MockStep objects."""
+
+    async def _iter(prompt):
+        for step in steps:
+            yield step
+
+    return _iter
 
 
 class TestCodexSessionWithMock:
-    """Test CodexSession by mocking the codex_app_server_sdk."""
+    """Test CodexSession by mocking the codex_app_server_sdk.
+
+    NOTE: These are API-contract tests only (query returns QueryResult,
+    clone preserves params, etc.).  They do NOT verify real Codex behavior.
+    Integration tests against a real backend are required for that.
+    """
 
     @pytest.fixture
     async def session_with_mock(self):
@@ -70,10 +92,10 @@ class TestCodexSessionWithMock:
         session = CodexSession("test-codex")
 
         # Create mock thread handle
-        mock_thread = AsyncMock()
+        mock_thread = MagicMock()
         mock_thread.thread_id = "mock-thread-123"
-        mock_thread.chat_once = AsyncMock(
-            return_value=MockChatResult(final_text="Codex says hello")
+        mock_thread.chat = _make_chat_iterator(
+            MockStep(step_type="codex", text="Codex says hello"),
         )
 
         # Create mock client
@@ -94,22 +116,30 @@ class TestCodexSessionWithMock:
         session, mock_thread, _ = session_with_mock
         result = await session.query("Hello Codex")
         assert result.response_text == "Codex says hello"
-        mock_thread.chat_once.assert_awaited_once_with("Hello Codex")
 
     @pytest.mark.asyncio
-    async def test_query_with_none_response(self, session_with_mock):
+    async def test_query_with_no_codex_step(self, session_with_mock):
         session, mock_thread, _ = session_with_mock
-        mock_thread.chat_once.return_value = MockChatResult(final_text=None)
+        mock_thread.chat = _make_chat_iterator(
+            MockStep(step_type="thinking", text="Let me think..."),
+        )
         result = await session.query("Hello")
         assert result.response_text == ""
 
     @pytest.mark.asyncio
     async def test_query_multiple(self, session_with_mock):
         session, mock_thread, _ = session_with_mock
-        mock_thread.chat_once.side_effect = [
-            MockChatResult(final_text="First answer"),
-            MockChatResult(final_text="Second answer"),
-        ]
+        call_count = 0
+
+        def _make_iter(prompt):
+            nonlocal call_count
+            call_count += 1
+            texts = ["First answer", "Second answer"]
+            return _make_chat_iterator(
+                MockStep(step_type="codex", text=texts[call_count - 1]),
+            )(prompt)
+
+        mock_thread.chat = _make_iter
         r1 = await session.query("First")
         r2 = await session.query("Second")
         assert r1.response_text == "First answer"

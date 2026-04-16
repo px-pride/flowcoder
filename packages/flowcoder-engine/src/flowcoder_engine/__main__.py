@@ -260,6 +260,7 @@ async def main() -> None:
             base_instructions=args.system_prompt,
             sandbox="danger-full-access",
             approval_policy=codex_approval,
+            protocol=protocol,
         )
         try:
             await session.start()
@@ -294,6 +295,7 @@ async def main() -> None:
             base_instructions=args.system_prompt,
             sandbox="danger-full-access",
             approval_policy=codex_approval,
+            protocol=protocol,
         ),
     )
     if not use_codex and claude_cmd:
