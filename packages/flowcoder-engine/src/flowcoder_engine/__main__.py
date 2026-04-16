@@ -245,22 +245,8 @@ async def main() -> None:
     # Build session for flowchart execution.
     session: BaseSession
     cwd = args.cwd or os.getcwd()
-    # Map CLI flags to CodexSession params when using codex backend.
-    codex_approval = None
-    if args.permission_mode == "bypassPermissions":
-        codex_approval = "never"
-    elif args.permission_mode:
-        codex_approval = "untrusted"
-
     if use_codex:
-        session = CodexSession(
-            "main",
-            model=args.model,
-            cwd=cwd,
-            base_instructions=args.system_prompt,
-            sandbox="danger-full-access",
-            approval_policy=codex_approval,
-        )
+        session = CodexSession("main", cwd=cwd)
         try:
             await session.start()
         except ImportError:
@@ -287,14 +273,7 @@ async def main() -> None:
     factory = SessionFactory()
     factory.register(
         "codex",
-        lambda name, model: CodexSession(
-            name=name,
-            model=model,
-            cwd=cwd,
-            base_instructions=args.system_prompt,
-            sandbox="danger-full-access",
-            approval_policy=codex_approval,
-        ),
+        lambda name, model: CodexSession(name=name, model=model, cwd=cwd),
     )
     if not use_codex and claude_cmd:
         factory.register(
