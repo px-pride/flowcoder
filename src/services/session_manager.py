@@ -11,7 +11,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ..models import Session, SessionState
 from ..utils import (
@@ -85,6 +85,11 @@ class SessionManager:
 
         self.sessions: Dict[str, Session] = {}
         self.active_session_name: Optional[str] = None
+
+        # Sessions that failed to initialize during load_sessions, as
+        # (session_name, error_message) tuples. UI can drain this list
+        # post-init to surface the errors to the user.
+        self.failed_loads: List[Tuple[str, str]] = []
 
         # Observer callbacks for session changes
         self._session_change_callbacks: List = []
@@ -666,6 +671,7 @@ class SessionManager:
                     except Exception as e:
                         logger.error(f"Failed to initialize {session.service_type} service for loaded session '{name}': {e}")
                         session.agent_service = None
+                        self.failed_loads.append((name, f"{session.service_type}: {e}"))
 
                     # Initialize ExecutionController for this session
                     try:

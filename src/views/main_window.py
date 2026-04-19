@@ -140,6 +140,26 @@ class MainWindow:
 
         logger.info(f"MainWindow v2.0 initialized ({width}x{height})")
 
+        # Surface any session-load failures collected by SessionManager
+        # once the UI is idle (so the dialog appears over the main window).
+        self.root.after_idle(self._show_failed_loads_dialog)
+
+    def _show_failed_loads_dialog(self):
+        """Show a warning dialog listing sessions that failed to initialize at load time."""
+        failed = list(self.session_manager.failed_loads)
+        if not failed:
+            return
+        self.session_manager.failed_loads.clear()
+
+        lines = [f" \u2022 {name}: {err}" for name, err in failed]
+        message = (
+            "The following saved sessions failed to initialize:\n\n"
+            + "\n".join(lines)
+            + "\n\nThese sessions are loaded but cannot be used until the "
+            "underlying issue is fixed (e.g. proxy unreachable)."
+        )
+        messagebox.showwarning("Sessions failed to load", message)
+
     def _create_menu_bar(self):
         """Create menu bar with File, Edit, and Help menus."""
         # Dark mode menu colors
