@@ -101,7 +101,7 @@ class ExecutionController:
         Initialize execution controller.
 
         Args:
-            agent_service: AI agent service instance (ClaudeAgentService or MockClaudeService)
+            agent_service: AI agent service instance (ClaudeEngineService or MockClaudeService)
             storage_service: Storage service for loading commands (required for command blocks)
             on_execution_start: Callback fired when command execution starts (command_name, context)
             on_block_start: Callback fired when block execution starts
@@ -947,105 +947,6 @@ class ExecutionController:
         else:
             raise ValueError(f"Unknown target type: {target_type}")
 
-    def _extract_text_from_sdk_message(self, message_str: str) -> str:
-        """
-        Extract actual text content from SDK message string representation.
-
-        Handles three formats:
-        1. Claude AssistantMessage with TextBlock (legacy)
-        2. Claude StreamEvent format (new SDK)
-        3. Plain text fallback for unstructured messages
-
-        Args:
-            message_str: String representation of SDK message
-
-        Returns:
-            Extracted text content, or empty string if not an assistant message
-        """
-
-        # 1. Check for Claude StreamEvent format (new SDK)
-        if "StreamEvent" in message_str and "event=" in message_str:
-            try:
-                # Extract text from content_block_delta events using regex
-                # This is more robust than ast.literal_eval which fails on escaped newlines
-                # Use flexible string matching to handle both escaped and unescaped quotes
-                if "content_block_delta" in message_str and "text_delta" in message_str:
-                    # Extract the text value using regex
-                    # Match various quote combinations to handle Python's repr() escaping
-                    import re
-
-                    # Try different patterns (repr() uses different quote combinations)
-                    patterns = [
-                        r"'text':\s*'((?:[^'\\]|\\.)*)'",      # 'text': '...'
-                        r'"text":\s*"((?:[^"\\]|\\.)*)"',      # "text": "..."
-                        r"\\'text\\':\s*\"((?:[^\"\\]|\\.)*?)\"",  # \'text\': "..." (escaped key, double value)
-                        r"'text':\s*\"((?:[^\"\\]|\\.)*?)\"",  # 'text': "..." (unescaped key, double value)
-                    ]
-
-                    text_match = None
-                    for pattern in patterns:
-                        text_match = re.search(pattern, message_str)
-                        if text_match:
-                            break
-
-                    if text_match:
-                        # Extract the text and unescape it
-                        text_content = text_match.group(1)
-                        # Unescape common escape sequences
-                        text_content = text_content.replace('\\n', '\n')
-                        text_content = text_content.replace('\\t', '\t')
-                        text_content = text_content.replace('\\r', '\r')
-                        text_content = text_content.replace("\\'", "'")
-                        text_content = text_content.replace('\\"', '"')
-                        text_content = text_content.replace('\\\\', '\\')
-                        return text_content
-            except Exception as e:
-                logger.debug(f"Failed to parse StreamEvent: {e}")
-
-        # 2. Check for Claude AssistantMessage with TextBlock (legacy)
-        if "AssistantMessage" in message_str:
-            # Extract text from TextBlock - try double quotes first
-            start = message_str.find('TextBlock(text="')
-            if start != -1:
-                start += len('TextBlock(text="')
-                end = message_str.find('")', start)
-                if end != -1:
-                    text_content = message_str[start:end]
-                    return text_content.replace('\\n', '\n')
-
-            # Try single quotes (slash commands use single quotes)
-            start = message_str.find("TextBlock(text='")
-            if start != -1:
-                start += len("TextBlock(text='")
-                end = message_str.find("')", start)
-                if end != -1:
-                    text_content = message_str[start:end]
-                    return text_content.replace('\\n', '\n')
-
-            return ""
-
-        # 3. Plain text fallback - return as-is if not a structured message.
-        # IMPORTANT: Don't return SDK message representations as text!
-        if message_str.strip():
-            # Check if this looks like an SDK message representation
-            # These should NOT be treated as plain text
-            sdk_message_types = [
-                'StreamEvent(',
-                'AssistantMessage(',
-                'UserMessage(',
-                'SystemMessage(',
-                'ResultMessage(',
-                'ToolUseBlock(',
-                'ToolResultBlock(',
-                'TextBlock('
-            ]
-
-            # Only return if it doesn't look like an SDK message
-            if not any(msg_type in message_str for msg_type in sdk_message_types):
-                return message_str
-
-        return ""
-
     async def _execute_prompt_block(
         self,
         block: PromptBlock,
@@ -1099,30 +1000,21 @@ class ExecutionController:
             full_response = ""
             chunk_count = 0
             text_chunks_captured = 0
+            from src.utils.sdk_message_parser import parse_sdk_message
+
             async for chunk in self.agent_service.stream_prompt(final_prompt):
-                chunk_str = str(chunk)
                 chunk_count += 1
+                text_content, _, msg_type = parse_sdk_message(chunk)
 
-                # Extract actual text content from SDK message
-                text_content = self._extract_text_from_sdk_message(chunk_str)
-                if text_content:
-                    # Check for suspicious content that looks like SDK messages (BUG DETECTION)
-                    if any(x in text_content for x in ['StreamEvent(', 'AssistantMessage(', 'ToolUseBlock(', 'ToolResultBlock(']):
-                        logger.warning(
-                            f"[CHUNK DEBUG] Suspicious text extracted (may be SDK message leak): "
-                            f"{repr(text_content[:100])}"
-                        )
-
+                if text_content and msg_type in ("assistant", "assistant_plain"):
                     text_chunks_captured += 1
-                    # Append text directly - SDK handles text flow correctly
                     full_response += text_content
                     logger.debug(f"[STREAM DEBUG] Chunk {chunk_count}: Captured text ({len(text_content)} chars): {repr(text_content[:50])}")
                 else:
-                    logger.debug(f"[STREAM DEBUG] Chunk {chunk_count}: No text extracted from: {chunk_str[:100]}")
+                    logger.debug(f"[STREAM DEBUG] Chunk {chunk_count}: No text (type={msg_type})")
 
-                # Call streaming callback with raw chunk (callback does its own parsing)
                 if self.on_prompt_stream:
-                    self.on_prompt_stream(final_prompt, chunk_str)
+                    self.on_prompt_stream(final_prompt, str(chunk))
 
             logger.debug(f"[STREAM DEBUG] Streaming complete: {chunk_count} total chunks, {text_chunks_captured} text chunks captured")
 
@@ -1174,18 +1066,16 @@ class ExecutionController:
                         chunk_count = 0
                         text_chunks_captured = 0
                         async for chunk in self.agent_service.stream_prompt(retry_prompt):
-                            chunk_str = str(chunk)
                             chunk_count += 1
-                            text_content = self._extract_text_from_sdk_message(chunk_str)
-                            if text_content:
+                            text_content, _, msg_type = parse_sdk_message(chunk)
+                            if text_content and msg_type in ("assistant", "assistant_plain"):
                                 text_chunks_captured += 1
-                                # Append text directly - SDK handles text flow correctly
                                 full_response += text_content
                                 logger.debug(f"[RETRY STREAM DEBUG] Chunk {chunk_count}: Captured text ({len(text_content)} chars): {repr(text_content[:50])}")
                             else:
-                                logger.debug(f"[RETRY STREAM DEBUG] Chunk {chunk_count}: No text extracted from: {chunk_str[:100]}")
+                                logger.debug(f"[RETRY STREAM DEBUG] Chunk {chunk_count}: No text (type={msg_type})")
                             if self.on_prompt_stream:
-                                self.on_prompt_stream(retry_prompt, chunk_str)
+                                self.on_prompt_stream(retry_prompt, str(chunk))
 
                         logger.debug(f"[RETRY STREAM DEBUG] Retry streaming complete: {chunk_count} total chunks, {text_chunks_captured} text chunks captured")
 

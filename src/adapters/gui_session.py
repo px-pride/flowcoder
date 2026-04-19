@@ -1,6 +1,6 @@
-"""GUISessionAdapter — bridges ClaudeAgentService to engine's BaseSession.
+"""GUISessionAdapter — bridges ClaudeEngineService to engine's BaseSession.
 
-Wraps the GUI's ClaudeAgentService so the engine's GraphWalker can use it
+Wraps the GUI's ClaudeEngineService so the engine's GraphWalker can use it
 without knowing about the GUI's service layer.
 """
 
@@ -13,22 +13,22 @@ from typing import TYPE_CHECKING, Any
 from flowcoder_engine.session import BaseSession, QueryResult
 
 if TYPE_CHECKING:
-    from src.services.claude_service import ClaudeAgentService
+    from src.services.claude_engine_service import ClaudeEngineService
 
 log = logging.getLogger(__name__)
 
 
 class GUISessionAdapter(BaseSession):
-    """Adapts ClaudeAgentService to the engine's BaseSession interface.
+    """Adapts ClaudeEngineService to the engine's BaseSession interface.
 
-    The GUI owns the ClaudeAgentService lifecycle (start/stop). This adapter
+    The GUI owns the ClaudeEngineService lifecycle (start/stop). This adapter
     translates engine query() calls into execute_prompt() calls on the
     underlying service.
     """
 
     def __init__(
         self,
-        agent_service: ClaudeAgentService,
+        agent_service: ClaudeEngineService,
         name: str = "gui",
     ) -> None:
         self._service = agent_service
@@ -57,10 +57,10 @@ class GUISessionAdapter(BaseSession):
     # -- BaseSession methods --
 
     def clone(self, name: str) -> GUISessionAdapter:
-        """Create a new adapter with a fresh ClaudeAgentService copy."""
-        from src.services.claude_service import ClaudeAgentService
+        """Create a new adapter with a fresh ClaudeEngineService copy."""
+        from src.services.claude_engine_service import ClaudeEngineService
 
-        new_service = ClaudeAgentService(
+        new_service = ClaudeEngineService(
             cwd=self._service.cwd,
             system_prompt=self._service.system_prompt,
             permission_mode=self._service.permission_mode,
@@ -68,14 +68,15 @@ class GUISessionAdapter(BaseSession):
             timeout_seconds=self._service.timeout_seconds,
             stderr_callback=self._service.stderr_callback,
             model=self._service.model,
+            extra_env=self._service.extra_env,
         )
         return GUISessionAdapter(new_service, name=name)
 
     def with_model(self, model: str) -> GUISessionAdapter:
         """Return a new adapter configured for a different model."""
-        from src.services.claude_service import ClaudeAgentService
+        from src.services.claude_engine_service import ClaudeEngineService
 
-        new_service = ClaudeAgentService(
+        new_service = ClaudeEngineService(
             cwd=self._service.cwd,
             system_prompt=self._service.system_prompt,
             permission_mode=self._service.permission_mode,
@@ -83,11 +84,12 @@ class GUISessionAdapter(BaseSession):
             timeout_seconds=self._service.timeout_seconds,
             stderr_callback=self._service.stderr_callback,
             model=model,
+            extra_env=self._service.extra_env,
         )
         return GUISessionAdapter(new_service, name=self._name)
 
     async def start(self) -> None:
-        """Start the underlying ClaudeAgentService session."""
+        """Start the underlying ClaudeEngineService session."""
         await self._service.start_session()
 
     async def query(
@@ -96,7 +98,7 @@ class GUISessionAdapter(BaseSession):
         block_id: str = "",
         block_name: str = "",
     ) -> QueryResult:
-        """Send a prompt via ClaudeAgentService and return a QueryResult."""
+        """Send a prompt via ClaudeEngineService and return a QueryResult."""
         start_ms = time.monotonic_ns() // 1_000_000
 
         result = await self._service.execute_prompt(prompt)

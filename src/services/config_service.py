@@ -58,7 +58,7 @@ class ClaudeConfig:
     """
 
     name: str
-    model: str = "claude-opus-4-5"
+    model: str = "claude-opus-4-7"
     permission_mode: str = "bypassPermissions"
     thinking: Dict[str, Any] = field(default_factory=lambda: {"type": "adaptive"})
     max_output_tokens: int = 64000
@@ -81,7 +81,7 @@ class ClaudeConfig:
         """Deserialize from a dictionary."""
         return cls(
             name=data["name"],
-            model=data.get("model", "claude-opus-4-5"),
+            model=data.get("model", "claude-opus-4-7"),
             permission_mode=data.get("permission_mode", "bypassPermissions"),
             thinking=data.get("thinking", {"type": "adaptive"}),
             max_output_tokens=data.get("max_output_tokens", 64000),
@@ -105,7 +105,7 @@ _CONFIG_EXT = ".claudeconfig"
 _DEFAULT_CONFIGS: List[ClaudeConfig] = [
     ClaudeConfig(
         name="claude-max",
-        model="claude-opus-4-5",
+        model="claude-opus-4-7",
         permission_mode="bypassPermissions",
         thinking={"type": "adaptive"},
         max_output_tokens=64000,
@@ -119,7 +119,7 @@ _DEFAULT_CONFIGS: List[ClaudeConfig] = [
     ),
     ClaudeConfig(
         name="codex-max",
-        model="claude-opus-4-5",
+        model="claude-opus-4-7",
         permission_mode="bypassPermissions",
         thinking={"type": "adaptive"},
         max_output_tokens=64000,
@@ -128,7 +128,7 @@ _DEFAULT_CONFIGS: List[ClaudeConfig] = [
     ),
     ClaudeConfig(
         name="codex-min",
-        model="claude-opus-4-5",
+        model="claude-opus-4-7",
         permission_mode="bypassPermissions",
         thinking={"type": "adaptive"},
         max_output_tokens=64000,

@@ -13,7 +13,8 @@ import logging
 import asyncio
 from typing import Optional, List
 
-from src.services import StorageService, ClaudeAgentService, MockClaudeService, AudioService
+from src.services import StorageService, MockClaudeService, AudioService
+from src.services.claude_engine_service import ClaudeEngineService
 from src.controllers import ExecutionController, CommandController, UIController
 from src.views.commands_tab import CommandsTab
 from src.views.agents_tab import AgentsTab
@@ -87,12 +88,12 @@ class MainWindow:
             logger.info("Using MockClaudeService (USE_MOCK_CLAUDE=true)")
             self.agent_service = MockClaudeService()
         else:
-            logger.info(f"Using real ClaudeAgentService with cwd={self.working_directory}")
-            self.agent_service = ClaudeAgentService(
+            logger.info(f"Using ClaudeEngineService with cwd={self.working_directory}")
+            self.agent_service = ClaudeEngineService(
                 cwd=self.working_directory,
                 permission_mode="bypassPermissions",
                 stderr_callback=self._on_claude_stderr,
-                model="claude-opus-4-5"
+                model="claude-opus-4-7"
             )
 
         self.execution_controller = ExecutionController(
@@ -571,12 +572,12 @@ class MainWindow:
                 logger.info("Reinitializing MockClaudeService")
                 self.agent_service = MockClaudeService()
             else:
-                logger.info(f"Reinitializing ClaudeAgentService with cwd={self.working_directory}")
-                self.agent_service = ClaudeAgentService(
+                logger.info(f"Reinitializing ClaudeEngineService with cwd={self.working_directory}")
+                self.agent_service = ClaudeEngineService(
                     cwd=self.working_directory,
                     permission_mode="bypassPermissions",
                     stderr_callback=self._on_claude_stderr,
-                    model="claude-opus-4-5"
+                    model="claude-opus-4-7"
                 )
 
             # Update execution controller with new service
@@ -781,6 +782,12 @@ Created with Claude Agent SDK
             logger.info("Shutting down audio service...")
             self.audio_service.shutdown()
             logger.info("Audio service shutdown")
+
+            # Stop the anthropic-proxy subprocess if we spawned one for codex.
+            logger.info("Stopping anthropic-proxy (if running)...")
+            from src.services.proxy_manager import get_proxy_manager
+            get_proxy_manager().stop()
+            logger.info("anthropic-proxy stopped")
 
             # Clean up agents tab (unregister callbacks, cancel tasks)
             logger.info("Cleaning up agents tab...")
@@ -1008,109 +1015,9 @@ Created with Claude Agent SDK
             )
 
     def _parse_sdk_message(self, sdk_message):
-        """
-        Parse SDK message object and extract text content and metadata.
-
-        Args:
-            sdk_message: Message object from Claude Agent SDK
-
-        Returns:
-            tuple: (text_content, verbose_content, message_type)
-        """
-
-        message_str = str(sdk_message)
-        message_type = "unknown"
-        text_content = ""
-        verbose_content = message_str
-
-        # Try to parse the message
-        try:
-            # Determine message type
-            if "AssistantMessage" in message_str:
-                message_type = "assistant"
-                # Extract text from TextBlock
-                # Format: AssistantMessage(content=[TextBlock(text="...")], ...)
-                # Try double quotes first
-                start = message_str.find('TextBlock(text="')
-                if start != -1:
-                    start += len('TextBlock(text="')
-                    end = message_str.find('")', start)
-                    if end != -1:
-                        text_content = message_str[start:end]
-                        text_content = text_content.replace('\\n', '\n')
-                else:
-                    # Try single quotes (slash commands use single quotes)
-                    start = message_str.find("TextBlock(text='")
-                    if start != -1:
-                        start += len("TextBlock(text='")
-                        end = message_str.find("')", start)
-                        if end != -1:
-                            text_content = message_str[start:end]
-                            text_content = text_content.replace('\\n', '\n')
-
-            elif "SystemMessage" in message_str:
-                message_type = "system"
-                text_content = "[System initialization]"
-
-            elif "ResultMessage" in message_str:
-                message_type = "result"
-                # Extract result field
-                start = message_str.find("result=\"")
-                if start != -1:
-                    start += len("result=\"")
-                    end = message_str.find('")', start)
-                    if end == -1:
-                        # Try finding just closing quote
-                        end = message_str.rfind('"')
-                    if end != -1:
-                        text_content = message_str[start:end]
-                        text_content = text_content.replace('\\n', '\n')
-
-            # Create pretty verbose output
-            try:
-                # Try to make it more readable
-                verbose_lines = []
-                if "AssistantMessage" in message_str:
-                    verbose_lines.append("📤 Assistant Message:")
-                    if text_content:
-                        verbose_lines.append(f"   Content: {text_content[:100]}...")
-                elif "SystemMessage" in message_str:
-                    verbose_lines.append("⚙️  System Message:")
-                    if "session_id" in message_str:
-                        # Extract session_id
-                        sid_start = message_str.find("'session_id': '") + len("'session_id': '")
-                        sid_end = message_str.find("'", sid_start)
-                        if sid_end != -1:
-                            session_id = message_str[sid_start:sid_end]
-                            verbose_lines.append(f"   Session: {session_id}")
-                elif "ResultMessage" in message_str:
-                    verbose_lines.append("✅ Result Message:")
-                    # Extract duration
-                    if "duration_ms" in message_str:
-                        dur_start = message_str.find("duration_ms=") + len("duration_ms=")
-                        dur_end = message_str.find(",", dur_start)
-                        if dur_end != -1:
-                            duration = message_str[dur_start:dur_end]
-                            verbose_lines.append(f"   Duration: {duration}ms")
-                    # Extract cost
-                    if "total_cost_usd" in message_str:
-                        cost_start = message_str.find("total_cost_usd=") + len("total_cost_usd=")
-                        cost_end = message_str.find(",", cost_start)
-                        if cost_end != -1:
-                            cost = message_str[cost_start:cost_end]
-                            verbose_lines.append(f"   Cost: ${cost}")
-
-                if verbose_lines:
-                    verbose_content = "\n".join(verbose_lines)
-
-            except:
-                pass  # Fall back to raw string
-
-        except Exception as e:
-            logger.warning(f"Failed to parse SDK message: {e}")
-            text_content = message_str
-
-        return (text_content, verbose_content, message_type)
+        """Delegate to the shared parser in src.utils.sdk_message_parser."""
+        from src.utils.sdk_message_parser import parse_sdk_message
+        return parse_sdk_message(sdk_message)
 
     async def _send_passthrough_message_async(self, message: str):
         """
@@ -1142,7 +1049,7 @@ Created with Claude Agent SDK
                 text_content, verbose_content, message_type = self._parse_sdk_message(chunk)
 
                 # Only display assistant messages in both tabs (clean text only)
-                if message_type == "assistant" and text_content:
+                if message_type in ("assistant", "assistant_plain") and text_content:
                     # Add paragraph break between separate TextBlocks
                     if had_previous_text and response_text:
                         response_text += "\n\n"
@@ -1262,12 +1169,12 @@ Created with Claude Agent SDK
                 logger.info("Reinitializing MockClaudeService")
                 self.agent_service = MockClaudeService()
             else:
-                logger.info(f"Reinitializing ClaudeAgentService with cwd={self.working_directory}")
-                self.agent_service = ClaudeAgentService(
+                logger.info(f"Reinitializing ClaudeEngineService with cwd={self.working_directory}")
+                self.agent_service = ClaudeEngineService(
                     cwd=self.working_directory,
                     permission_mode="bypassPermissions",
                     stderr_callback=self._on_claude_stderr,
-                    model="claude-opus-4-5"
+                    model="claude-opus-4-7"
                 )
 
             # Update execution controller with new service

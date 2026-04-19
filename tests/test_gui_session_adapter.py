@@ -11,13 +11,13 @@ sys.path.insert(0, "packages/flowcoder-engine/src")
 sys.path.insert(0, ".")
 
 from flowcoder_engine.session import BaseSession, QueryResult
-from src.services.claude_service import PromptResult
+from src.services.exceptions import PromptResult
 
 
-# -- Mock ClaudeAgentService for tests --
+# -- Mock ClaudeEngineService for tests --
 
 def _make_mock_service(**overrides):
-    """Create a mock ClaudeAgentService with sensible defaults."""
+    """Create a mock ClaudeEngineService with sensible defaults."""
     svc = MagicMock()
     svc.cwd = "/tmp/test"
     svc.system_prompt = "You are a test agent."
@@ -26,6 +26,7 @@ def _make_mock_service(**overrides):
     svc.timeout_seconds = 300
     svc.stderr_callback = None
     svc.model = "claude-sonnet-4-5-20250929"
+    svc.extra_env = {}
     svc._session_active = True
 
     svc.start_session = AsyncMock()
@@ -117,7 +118,7 @@ class TestQuery:
     @pytest.mark.asyncio
     async def test_query_ignores_block_id_and_name(self):
         """block_id and block_name are part of BaseSession interface but
-        ClaudeAgentService doesn't use them — verify they don't cause errors."""
+        ClaudeEngineService doesn't use them — verify they don't cause errors."""
         adapter = _make_adapter()
         result = await adapter.query("test", block_id="b1", block_name="prompt_0")
         assert result.response_text == "Hello from Claude"
@@ -129,7 +130,7 @@ class TestClone:
     def test_clone_returns_new_adapter(self):
         adapter = _make_adapter(name="original")
 
-        with patch("src.services.claude_service.ClaudeAgentService") as MockCls:
+        with patch("src.services.claude_engine_service.ClaudeEngineService") as MockCls:
             MockCls.return_value = _make_mock_service()
             cloned = adapter.clone("spawned-1")
 
@@ -143,7 +144,7 @@ class TestClone:
             permission_mode="bypassPermissions",
         )
 
-        with patch("src.services.claude_service.ClaudeAgentService") as MockCls:
+        with patch("src.services.claude_engine_service.ClaudeEngineService") as MockCls:
             MockCls.return_value = _make_mock_service()
             cloned = adapter.clone("child")
 
@@ -155,13 +156,14 @@ class TestClone:
             timeout_seconds=300,
             stderr_callback=None,
             model="claude-haiku-4-5-20251001",
+            extra_env={},
         )
 
     def test_clone_has_independent_cost(self):
         adapter = _make_adapter()
         adapter._total_cost = 1.50
 
-        with patch("src.services.claude_service.ClaudeAgentService") as MockCls:
+        with patch("src.services.claude_engine_service.ClaudeEngineService") as MockCls:
             MockCls.return_value = _make_mock_service()
             cloned = adapter.clone("child")
 
@@ -174,7 +176,7 @@ class TestWithModel:
     def test_with_model_returns_new_adapter_with_different_model(self):
         adapter = _make_adapter()
 
-        with patch("src.services.claude_service.ClaudeAgentService") as MockCls:
+        with patch("src.services.claude_engine_service.ClaudeEngineService") as MockCls:
             MockCls.return_value = _make_mock_service()
             new = adapter.with_model("claude-haiku-4-5-20251001")
 

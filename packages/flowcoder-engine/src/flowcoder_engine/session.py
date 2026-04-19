@@ -13,7 +13,7 @@ import logging
 import os
 import secrets
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
 log = logging.getLogger(__name__)
@@ -52,12 +52,15 @@ class QueryResult:
         self.duration_ms = duration_ms
 
 
-def _clean_env() -> dict[str, str]:
+def _clean_env(overrides: dict[str, str] | None = None) -> dict[str, str]:
     """Return a copy of os.environ for the inner Claude CLI.
 
     Sets the env vars that make inner Claude use the SDK control protocol
     (for tool permissions and MCP), without depending on the full
     claude-code-sdk package.
+
+    Optional `overrides` are applied last (e.g. ANTHROPIC_BASE_URL for
+    routing through anthropic-proxy-rs).
     """
     from .cli import SDK_VERSION
 
@@ -65,6 +68,8 @@ def _clean_env() -> dict[str, str]:
     env.pop("CLAUDECODE", None)
     env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-py"
     env["CLAUDE_AGENT_SDK_VERSION"] = SDK_VERSION
+    if overrides:
+        env.update(overrides)
     return env
 
 
@@ -152,6 +157,8 @@ class ClaudeSession(BaseSession):
         claude_cmd: list[str],
         protocol: ProtocolHandler | None = None,
         control_callback: ControlCallback | None = None,
+        env_overrides: dict[str, str] | None = None,
+        cwd: str | None = None,
     ) -> None:
         self._name = name
         self._session_id: str | None = None
@@ -160,6 +167,8 @@ class ClaudeSession(BaseSession):
         self._claude_cmd = claude_cmd
         self._protocol = protocol
         self._control_callback = control_callback
+        self._env_overrides = dict(env_overrides) if env_overrides else None
+        self._cwd = cwd
         self._process: ClaudeProcess | None = None
         self._stderr_task: asyncio.Task[None] | None = None
 
@@ -184,6 +193,8 @@ class ClaudeSession(BaseSession):
             claude_cmd=list(self._claude_cmd),
             protocol=self._protocol,
             control_callback=self._control_callback,
+            env_overrides=self._env_overrides,
+            cwd=self._cwd,
         )
 
     def with_model(self, model: str) -> ClaudeSession:
@@ -200,6 +211,8 @@ class ClaudeSession(BaseSession):
             claude_cmd=cmd,
             protocol=self._protocol,
             control_callback=self._control_callback,
+            env_overrides=self._env_overrides,
+            cwd=self._cwd,
         )
 
     async def set_permission_mode(self, mode: str) -> None:
@@ -227,7 +240,11 @@ class ClaudeSession(BaseSession):
         """Spawn the claude subprocess."""
         _tracer.start_span("session.start", attributes={"session.name": self.name}).end()
         self._process = ClaudeProcess()
-        await self._process.start(self._claude_cmd, _clean_env(), os.getcwd())
+        await self._process.start(
+            self._claude_cmd,
+            _clean_env(self._env_overrides),
+            self._cwd or os.getcwd(),
+        )
         self._stderr_task = asyncio.create_task(self._forward_stderr())
 
     async def query(
@@ -333,6 +350,66 @@ class ClaudeSession(BaseSession):
                 "session.duration_ms": result.duration_ms,
             })
             return result
+
+    async def stream_query(
+        self,
+        prompt: str,
+        block_id: str = "",
+        block_name: str = "",
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Send a prompt and yield raw JSON messages as they arrive.
+
+        Yields each message dict from the inner CLI's stream-json output
+        (system, assistant, stream_event, result).  control_request is
+        handled transparently and not yielded; rate_limit_event is
+        filtered out.  Cost and session_id are updated on the terminal
+        'result' message before it is yielded.
+        """
+        with _tracer.start_as_current_span(
+            "session.stream_query",
+            attributes={"session.name": self.name, "block.id": block_id, "block.name": block_name},
+        ) as span:
+            assert self._process is not None
+
+            await self._process.write({
+                "type": "user",
+                "message": {"role": "user", "content": prompt},
+            })
+
+            while True:
+                data = await self._process.read()
+                if data is None:
+                    return
+
+                msg_type = data.get("type")
+
+                if msg_type == "control_request":
+                    await self._handle_control_request(data)
+                    continue
+
+                if msg_type == "rate_limit_event":
+                    continue
+
+                if self._protocol and msg_type in ("system", "assistant", "stream_event"):
+                    self._protocol.emit_forwarded(
+                        data, self.name, block_id, block_name
+                    )
+
+                if msg_type == "result":
+                    cli_cost = data.get("total_cost_usd", 0.0)
+                    cost = cli_cost - self._last_cli_cost
+                    self._last_cli_cost = cli_cost
+                    self._total_cost += cost
+                    if data.get("session_id"):
+                        self._session_id = data["session_id"]
+                    span.set_attributes({
+                        "session.cost_usd": cost,
+                        "session.duration_ms": data.get("duration_ms", 0),
+                    })
+                    yield data
+                    return
+
+                yield data
 
     async def _handle_control_request(self, request: dict[str, Any]) -> None:
         """Relay a control request from inner claude to the client."""

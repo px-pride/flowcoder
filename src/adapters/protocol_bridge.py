@@ -158,7 +158,7 @@ class GUIProtocolBridge(ProtocolHandler):
     ) -> dict[str, Any]:
         """Not applicable in GUI mode — permissions are handled by the service."""
         raise NotImplementedError(
-            "GUI mode handles permissions via ClaudeAgentService, "
+            "GUI mode handles permissions via ClaudeEngineService, "
             "not protocol-level control forwarding."
         )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from flowcoder_engine.session import ClaudeSession as Session
+from flowcoder_engine.session import ClaudeSession as Session, _clean_env
 from tests.conftest import MockProtocol
 
 
@@ -78,6 +78,138 @@ class TestWithModel:
         session = Session(name="test", claude_cmd=["claude"], protocol=proto)
         new = session.with_model("haiku")
         assert new._protocol is proto
+
+
+class TestEnvOverrides:
+    def test_clean_env_no_overrides_unchanged(self):
+        env = _clean_env()
+        assert "ANTHROPIC_BASE_URL" not in env
+        assert env["CLAUDE_CODE_ENTRYPOINT"] == "sdk-py"
+
+    def test_clean_env_applies_overrides(self):
+        env = _clean_env({"ANTHROPIC_BASE_URL": "http://127.0.0.1:3000"})
+        assert env["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:3000"
+        assert env["CLAUDE_CODE_ENTRYPOINT"] == "sdk-py"
+
+    def test_clean_env_overrides_can_replace_sdk_keys(self):
+        env = _clean_env({"CLAUDE_CODE_ENTRYPOINT": "custom"})
+        assert env["CLAUDE_CODE_ENTRYPOINT"] == "custom"
+
+    def test_session_stores_env_overrides(self):
+        s = Session(name="test", claude_cmd=["claude"], env_overrides={"X": "1"})
+        assert s._env_overrides == {"X": "1"}
+
+    def test_session_env_overrides_default_none(self):
+        s = Session(name="test", claude_cmd=["claude"])
+        assert s._env_overrides is None
+
+    def test_session_env_overrides_copied_not_shared(self):
+        overrides = {"X": "1"}
+        s = Session(name="test", claude_cmd=["claude"], env_overrides=overrides)
+        overrides["X"] = "2"
+        assert s._env_overrides == {"X": "1"}
+
+    def test_clone_preserves_env_overrides(self):
+        s = Session(name="orig", claude_cmd=["claude"], env_overrides={"X": "1"})
+        c = s.clone("worker")
+        assert c._env_overrides == {"X": "1"}
+
+    def test_with_model_preserves_env_overrides(self):
+        s = Session(name="t", claude_cmd=["claude"], env_overrides={"X": "1"})
+        n = s.with_model("haiku")
+        assert n._env_overrides == {"X": "1"}
+
+
+class TestCwd:
+    def test_cwd_default_none(self):
+        s = Session(name="test", claude_cmd=["claude"])
+        assert s._cwd is None
+
+    def test_cwd_stored(self):
+        s = Session(name="test", claude_cmd=["claude"], cwd="/tmp/work")
+        assert s._cwd == "/tmp/work"
+
+    def test_clone_preserves_cwd(self):
+        s = Session(name="orig", claude_cmd=["claude"], cwd="/tmp/work")
+        c = s.clone("worker")
+        assert c._cwd == "/tmp/work"
+
+    def test_with_model_preserves_cwd(self):
+        s = Session(name="t", claude_cmd=["claude"], cwd="/tmp/work")
+        n = s.with_model("haiku")
+        assert n._cwd == "/tmp/work"
+
+
+class TestStreamQuery:
+    @pytest.mark.asyncio
+    async def test_stream_query_yields_messages_then_result(self):
+        """stream_query yields each subprocess message; result updates state."""
+        from unittest.mock import AsyncMock
+
+        s = Session(name="test", claude_cmd=["claude"])
+
+        # Fake process: yields system, assistant, result, then EOF
+        messages = [
+            {"type": "system", "subtype": "init"},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}},
+            {
+                "type": "result",
+                "total_cost_usd": 0.05,
+                "session_id": "sess-123",
+                "duration_ms": 500,
+            },
+        ]
+
+        fake_process = AsyncMock()
+        fake_process.write = AsyncMock()
+        read_iter = iter(messages)
+        async def _read():
+            try:
+                return next(read_iter)
+            except StopIteration:
+                return None
+        fake_process.read = _read
+        s._process = fake_process
+
+        collected = []
+        async for chunk in s.stream_query("test prompt"):
+            collected.append(chunk)
+
+        assert len(collected) == 3
+        assert collected[0]["type"] == "system"
+        assert collected[1]["type"] == "assistant"
+        assert collected[2]["type"] == "result"
+        assert s.session_id == "sess-123"
+        assert s.total_cost == pytest.approx(0.05)
+
+    @pytest.mark.asyncio
+    async def test_stream_query_filters_rate_limit(self):
+        """rate_limit_event is filtered out before yielding."""
+        from unittest.mock import AsyncMock
+
+        s = Session(name="test", claude_cmd=["claude"])
+
+        messages = [
+            {"type": "rate_limit_event"},
+            {"type": "assistant", "message": {"content": []}},
+            {"type": "result", "total_cost_usd": 0.0},
+        ]
+
+        fake_process = AsyncMock()
+        fake_process.write = AsyncMock()
+        read_iter = iter(messages)
+        async def _read():
+            try:
+                return next(read_iter)
+            except StopIteration:
+                return None
+        fake_process.read = _read
+        s._process = fake_process
+
+        collected = [c async for c in s.stream_query("test")]
+        types = [c["type"] for c in collected]
+        assert "rate_limit_event" not in types
+        assert types == ["assistant", "result"]
 
 
 class TestStderrForwarding:

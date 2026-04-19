@@ -14,15 +14,15 @@ from .storage_service import (
 
 from .base_service import BaseService
 
-from .claude_service import (
-    ClaudeAgentService,
-    MockClaudeService,
+from .exceptions import (
     ClaudeServiceError,
     ClaudeAPIError,
     SchemaValidationError,
     TimeoutError,
-    PromptResult
+    PromptResult,
 )
+from .mock_service import MockClaudeService
+from .claude_engine_service import ClaudeEngineService
 
 from .service_factory import (
     ServiceFactory,
@@ -89,7 +89,7 @@ __all__ = [
     # Base Service
     'BaseService',
     # Claude
-    'ClaudeAgentService',
+    'ClaudeEngineService',
     'MockClaudeService',
     'ClaudeServiceError',
     'ClaudeAPIError',

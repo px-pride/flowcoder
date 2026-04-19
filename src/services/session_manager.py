@@ -19,7 +19,7 @@ from ..utils import (
     GitRemoteManager,
     GitRemoteError,
 )
-from .service_factory import ServiceFactory
+from .service_factory import ServiceFactory, ServiceFactoryError
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +313,11 @@ class SessionManager:
                 permission_mode="bypassPermissions"  # Skip permission prompts for automation
             )
             logger.info(f"Initialized {session.service_type} service for session '{name}'")
+        except ServiceFactoryError:
+            # Surface explicit service creation failures (e.g. proxy missing
+            # for codex) so the caller can show a dialog instead of silently
+            # creating a session with no agent_service.
+            raise
         except Exception as e:
             logger.error(f"Failed to initialize {session.service_type} service: {e}")
             # Continue without service - service will be None

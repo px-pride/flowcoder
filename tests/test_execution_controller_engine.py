@@ -28,14 +28,14 @@ from src.models.command import Command, CommandMetadata
 from src.models.connection import Connection
 from src.models.execution import ExecutionContext, ExecutionStatus
 from src.models.flowchart import Flowchart
-from src.services.claude_service import PromptResult
+from src.services.exceptions import PromptResult
 
 
 # -- Helpers --
 
 
 def _make_mock_service(**overrides):
-    """Create a mock ClaudeAgentService."""
+    """Create a mock ClaudeEngineService."""
     svc = MagicMock()
     svc.cwd = "/tmp/test"
     svc.system_prompt = "test agent"

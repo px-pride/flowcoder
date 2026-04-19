@@ -1,16 +1,19 @@
 """
 Service Factory for creating AI service instances.
 
-There is one underlying service class (`ClaudeAgentService`). The
-"Codex" service type is the same class with proxy env vars injected so
-the claude CLI routes through anthropic-proxy-rs to OpenAI.
+There is one underlying service class (`ClaudeEngineService`) backed by
+``flowcoder_engine.ClaudeSession`` which spawns the system claude CLI
+binary directly. The "Codex" service type is the same class with proxy
+env vars injected so the claude CLI routes through anthropic-proxy-rs
+to OpenAI.
 """
 
 import logging
 from typing import Optional
 
 from .base_service import BaseService
-from .claude_service import ClaudeAgentService, MockClaudeService
+from .claude_engine_service import ClaudeEngineService
+from .mock_service import MockClaudeService
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +32,8 @@ class ServiceFactory:
     """
     Factory for creating AI service instances.
 
-    "claude" -> ClaudeAgentService
-    "codex"  -> ClaudeAgentService with ANTHROPIC_BASE_URL/ANTHROPIC_MODEL set
+    "claude" -> ClaudeEngineService
+    "codex"  -> ClaudeEngineService with ANTHROPIC_BASE_URL/ANTHROPIC_MODEL set
     "mock"   -> MockClaudeService
     """
 
@@ -86,10 +89,10 @@ class ServiceFactory:
         cwd: str,
         system_prompt: Optional[str],
         **kwargs
-    ) -> ClaudeAgentService:
-        logger.info(f"Creating ClaudeAgentService (cwd={cwd})")
+    ) -> ClaudeEngineService:
+        logger.info(f"Creating ClaudeEngineService (cwd={cwd})")
 
-        return ClaudeAgentService(
+        return ClaudeEngineService(
             cwd=cwd,
             system_prompt=system_prompt,
             permission_mode=kwargs.get("permission_mode", "bypassPermissions"),
@@ -104,29 +107,34 @@ class ServiceFactory:
         cwd: str,
         system_prompt: Optional[str],
         **kwargs
-    ) -> ClaudeAgentService:
+    ) -> ClaudeEngineService:
         """
-        Create a ClaudeAgentService configured to route through anthropic-proxy.
+        Create a ClaudeEngineService configured to route through anthropic-proxy.
 
-        The proxy must be running externally (see scripts/anthropic-codex-proxy/
-        in the personal-assistant repo, or the README).
+        Lazily spawns the proxy subprocess on first call. Raises
+        ProxyStartupError (wrapped as ServiceFactoryError by the caller) if
+        the proxy binary is missing or the subprocess fails to become healthy.
         """
+        from .proxy_manager import get_proxy_manager
+
         proxy_url = kwargs.get("proxy_url") or DEFAULT_PROXY_URL
         proxy_model = kwargs.get("proxy_model") or DEFAULT_PROXY_MODEL
+
+        get_proxy_manager().ensure_started()
 
         extra_env = {
             "ANTHROPIC_BASE_URL": proxy_url,
             "ANTHROPIC_MODEL": proxy_model,
-            # The proxy doesn't validate the API key, but the SDK requires one to be set
+            # The proxy doesn't validate the API key, but the CLI requires one to be set
             "ANTHROPIC_API_KEY": kwargs.get("anthropic_api_key", "proxy"),
         }
 
         logger.info(
-            f"Creating Codex (proxied) ClaudeAgentService "
+            f"Creating Codex (proxied) ClaudeEngineService "
             f"(cwd={cwd}, proxy={proxy_url}, model={proxy_model})"
         )
 
-        return ClaudeAgentService(
+        return ClaudeEngineService(
             cwd=cwd,
             system_prompt=system_prompt,
             permission_mode=kwargs.get("permission_mode", "bypassPermissions"),
@@ -154,7 +162,7 @@ class ServiceFactory:
             "claude": (
                 ServiceFactory.SERVICE_DISPLAY_NAMES["claude"],
                 True,
-                "Claude Agent SDK"
+                "System claude CLI via flowcoder_engine"
             ),
             "codex": (
                 ServiceFactory.SERVICE_DISPLAY_NAMES["codex"],

@@ -87,16 +87,79 @@ def _build_verbose_content(message_str: str, text_content: str) -> str:
     return "\n".join(verbose_lines) if verbose_lines else message_str
 
 
+def _parse_engine_dict(msg: dict) -> tuple[str, str, str]:
+    """Parse an engine-format dict message (from flowcoder_engine.ClaudeSession).
+
+    Engine yields raw stream-json dicts:
+      {"type": "system", ...}
+      {"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}, ...]}}
+      {"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "..."}}}
+      {"type": "stream_event", "event": {"type": "content_block_start", "content_block": {"type": "text"}}}
+      {"type": "result", "result": "...", "duration_ms": ..., "total_cost_usd": ..., "session_id": "..."}
+    """
+    msg_type = msg.get("type")
+
+    if msg_type == "stream_event":
+        event = msg.get("event", {})
+        evt_type = event.get("type")
+
+        if evt_type == "content_block_delta":
+            delta = event.get("delta", {})
+            if delta.get("type") == "text_delta":
+                text = delta.get("text", "")
+                return (text, f"[StreamEvent] {text}", "text_delta")
+            return ("", "", "system")
+
+        if evt_type == "content_block_start":
+            block = event.get("content_block", {})
+            if block.get("type") == "text":
+                return ("", "", "content_block_start")
+            return ("", "", "system")
+
+        return ("", "", "system")
+
+    if msg_type == "assistant":
+        message = msg.get("message", {})
+        content = message.get("content", [])
+        text_parts = []
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_parts.append(block.get("text", ""))
+        elif isinstance(content, str):
+            text_parts.append(content)
+        text = "".join(text_parts)
+        return (text, f"📤 Assistant Message:\n   Content: {text[:100]}...", "assistant")
+
+    if msg_type == "system":
+        sid = msg.get("session_id", "")
+        verbose = f"⚙️  System Message:\n   Session: {sid}" if sid else "⚙️  System Message"
+        return ("[System initialization]", verbose, "system")
+
+    if msg_type == "user":
+        return ("", "[User Message]", "result")
+
+    if msg_type == "result":
+        result_text = msg.get("result", "") or ""
+        duration = msg.get("duration_ms", 0)
+        cost = msg.get("total_cost_usd", 0.0)
+        verbose = f"✅ Result Message:\n   Duration: {duration}ms\n   Cost: ${cost}"
+        return (result_text, verbose, "result")
+
+    return ("", str(msg), "unknown")
+
+
 def parse_sdk_message(sdk_message) -> tuple[str, str, str]:
     """
-    Parse an SDK message object and extract text content and metadata.
+    Parse a stream message and extract text content and metadata.
 
-    This is the shared parser used by both the GUI and CLI to interpret
-    raw messages from the Claude Agent SDK.
+    Handles both engine dict format (from flowcoder_engine.ClaudeSession)
+    and SDK object format (from claude-agent-sdk). Engine dicts are
+    detected by isinstance(msg, dict) and routed to _parse_engine_dict.
 
     Args:
-        sdk_message: Message object from Claude Agent SDK, or a plain
-                     text fallback. Will be converted to str for parsing.
+        sdk_message: Either a dict (engine format) or an SDK message
+                     object, or a plain text fallback.
 
     Returns:
         tuple of (text_content, verbose_content, message_type) where:
@@ -111,6 +174,9 @@ def parse_sdk_message(sdk_message) -> tuple[str, str, str]:
                 "result"          - ResultMessage with metadata
                 "unknown"         - Unrecognized message
     """
+    if isinstance(sdk_message, dict):
+        return _parse_engine_dict(sdk_message)
+
     message_str = str(sdk_message)
     message_type = "unknown"
     text_content = ""

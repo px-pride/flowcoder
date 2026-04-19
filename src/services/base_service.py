@@ -13,7 +13,7 @@ class BaseService(ABC):
     """
     Abstract base class for AI services.
 
-    All AI service implementations (ClaudeAgentService, MockClaudeService)
+    All AI service implementations (ClaudeEngineService, MockClaudeService)
     must inherit from this class and implement all abstract methods.
 
     This ensures they can be used interchangeably via dependency injection.
