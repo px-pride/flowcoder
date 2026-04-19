@@ -47,7 +47,6 @@ except ImportError:
     _HAS_OTEL_SDK = False
 
 from .cli import build_inner_claude_cmd, build_inner_env, build_variables, parse_args
-from .codex_session import CodexSession
 from .protocol import ProtocolHandler
 from .resolver import CommandNotFoundError, resolve_command
 from .session import BaseSession, ClaudeSession
@@ -198,28 +197,22 @@ async def main() -> None:
     otel_provider = _init_tracing()
     _tracer = trace.get_tracer(__name__)
 
-    # --- Backend-specific setup ---
-    process: ClaudeProcess | None = None
-    claude_cmd: list[str] = []
-    use_codex = args.backend == "codex"
+    # Find claude binary
+    try:
+        claude_path = args.claude_path or find_claude()
+    except FileNotFoundError as e:
+        protocol.emit_result(str(e), is_error=True)
+        sys.exit(1)
 
-    if not use_codex:
-        # Find claude binary
-        try:
-            claude_path = args.claude_path or find_claude()
-        except FileNotFoundError as e:
-            protocol.emit_result(str(e), is_error=True)
-            sys.exit(1)
+    # Build inner Claude command and environment from parsed args.
+    claude_cmd = build_inner_claude_cmd(args, claude_path)
+    inner_env = build_inner_env(args)
+    inner_cwd = args.cwd or ""
 
-        # Build inner Claude command and environment from parsed args.
-        claude_cmd = build_inner_claude_cmd(args, claude_path)
-        inner_env = build_inner_env(args)
-        inner_cwd = args.cwd or ""
-
-        # Start the inner Claude process
-        process = ClaudeProcess()
-        await process.start(claude_cmd, inner_env, inner_cwd)
-        protocol.log("Inner claude process started")
+    # Start the inner Claude process
+    process = ClaudeProcess()
+    await process.start(claude_cmd, inner_env, inner_cwd)
+    protocol.log("Inner claude process started")
 
     # Signal handling
     shutdown_event = asyncio.Event()
@@ -227,7 +220,7 @@ async def main() -> None:
     def handle_signal(signum: int, frame: object) -> None:
         protocol.log(f"Received signal {signum}, shutting down...")
         shutdown_event.set()
-        if process is not None and process.is_running and process._proc is not None:
+        if process.is_running and process._proc is not None:
             try:
                 process._proc.kill()
             except (ProcessLookupError, OSError):
@@ -243,49 +236,28 @@ async def main() -> None:
     await router.start()
 
     # Build session for flowchart execution.
-    session: BaseSession
-    cwd = args.cwd or os.getcwd()
-    if use_codex:
-        session = CodexSession("main", cwd=cwd)
-        try:
-            await session.start()
-        except ImportError:
-            protocol.log(
-                "Error: codex backend requires 'codex-app-server-sdk'. "
-                "Install it with: pip install codex-app-server-sdk"
-            )
-            sys.exit(1)
-        protocol.log("Codex session started")
-    else:
-        assert process is not None
-        session = ClaudeSession(
-            "main",
-            claude_cmd,
-            protocol=protocol,
-            control_callback=lambda req: _handle_control_request(
-                req, protocol, router
-            ),
-        )
-        # Attach the already-running process to the session
-        session._process = process  # type: ignore[attr-defined]
-
-    # Build session factory for cross-backend spawning.
-    factory = SessionFactory()
-    factory.register(
-        "codex",
-        lambda name, model: CodexSession(name=name, model=model, cwd=cwd),
+    session: BaseSession = ClaudeSession(
+        "main",
+        claude_cmd,
+        protocol=protocol,
+        control_callback=lambda req: _handle_control_request(
+            req, protocol, router
+        ),
     )
-    if not use_codex and claude_cmd:
-        factory.register(
-            "claude",
-            lambda name, model: (
-                ClaudeSession(
-                    name=name,
-                    claude_cmd=[*claude_cmd, "--model", model] if model else list(claude_cmd),
-                    protocol=protocol,
-                )
-            ),
-        )
+    # Attach the already-running process to the session
+    session._process = process  # type: ignore[attr-defined]
+
+    # Build session factory for spawned agents.
+    # Both "claude" and "codex" backends create ClaudeSession; codex routing
+    # is handled by ANTHROPIC_BASE_URL/ANTHROPIC_MODEL env vars inherited
+    # from the engine's environment.
+    def _make_claude_session(name: str, model: str | None) -> ClaudeSession:
+        cmd = [*claude_cmd, "--model", model] if model else list(claude_cmd)
+        return ClaudeSession(name=name, claude_cmd=cmd, protocol=protocol)
+
+    factory = SessionFactory()
+    factory.register("claude", _make_claude_session)
+    factory.register("codex", _make_claude_session)
 
     try:
         while not shutdown_event.is_set():
@@ -318,48 +290,31 @@ async def main() -> None:
                                 cmd_name, args.search_paths
                             )
                         except CommandNotFoundError:
-                            if use_codex:
-                                protocol.emit_result(
-                                    f"Unknown command /{cmd_name}",
-                                    is_error=True,
-                                )
-                            else:
-                                # Forward to claude as-is
-                                protocol.log(
-                                    f"Unknown command /{cmd_name}, proxying to claude"
-                                )
-                                assert process is not None
-                                await _proxy_turn(process, protocol, msg, router)
+                            # Forward to claude as-is
+                            protocol.log(
+                                f"Unknown command /{cmd_name}, proxying to claude"
+                            )
+                            await _proxy_turn(process, protocol, msg, router)
                             continue
 
-                        # Known command — takeover for flowchart execution
-                        if not use_codex:
-                            # Drain stale control_responses (Claude-specific)
-                            _drained = 0
-                            while not router.control_response_queue.empty():
-                                router.control_response_queue.get_nowait()
-                                _drained += 1
-                            if _drained:
-                                protocol.log(
-                                    f"Drained {_drained} stale control_response(s)"
-                                )
+                        # Known command — takeover for flowchart execution.
+                        # Drain stale control_responses left from prior proxy turns.
+                        _drained = 0
+                        while not router.control_response_queue.empty():
+                            router.control_response_queue.get_nowait()
+                            _drained += 1
+                        if _drained:
+                            protocol.log(
+                                f"Drained {_drained} stale control_response(s)"
+                            )
 
                         protocol.log(f"Flowchart takeover: /{cmd_name} {cmd_args}")
                         await _run_flowchart_takeover(
                             session, cmd, cmd_name, cmd_args, protocol, args, factory,
                         )
                     else:
-                        if use_codex:
-                            # Codex backend: no Claude proxy for non-slash messages
-                            protocol.emit_result(
-                                "Codex backend only supports slash commands. "
-                                "Use /command_name to run a flowchart.",
-                                is_error=True,
-                            )
-                        else:
-                            # Normal message — proxy to inner claude
-                            assert process is not None
-                            await _proxy_turn(process, protocol, msg, router)
+                        # Normal message — proxy to inner claude
+                        await _proxy_turn(process, protocol, msg, router)
                 finally:
                     if ctx_token is not None:
                         otel_context.detach(ctx_token)
@@ -377,23 +332,20 @@ async def main() -> None:
                             "response": {},
                         },
                     })
-                elif not use_codex:
-                    assert process is not None
+                else:
                     await process.write(msg)
                     await _forward_until_control_response(
                         process, protocol
                     )
 
-            elif not use_codex:
+            else:
                 # Forward any other message types to inner claude
                 msg.pop("_trace_context", None)
-                assert process is not None
                 await process.write(msg)
 
     finally:
         await session.stop()
-        if process is not None:
-            await process.stop()
+        await process.stop()
         if otel_provider:
             otel_provider.shutdown()
         protocol.log("Shutdown complete")

@@ -1,7 +1,7 @@
 """
 SDK Message Parser for FlowCoder
 
-Parses raw Claude Agent SDK / Codex message objects into structured
+Parses raw Claude Agent SDK message objects into structured
 (text_content, verbose_content, message_type) tuples. Used by both
 the GUI (SessionTabWidget) and CLI (CLIAgent) for streaming output.
 """
@@ -20,7 +20,7 @@ _TEXT_DELTA_PATTERNS = [
     re.compile(r"'text':\s*\"((?:[^\"\\]|\\.)*?)\""),      # 'text': "..."
 ]
 
-# Markers that indicate a structured SDK message (vs plain text from Codex)
+# Markers that indicate a structured SDK message (vs raw plain text)
 _STRUCTURED_MARKERS = ("AssistantMessage", "SystemMessage", "ResultMessage", "StreamEvent", "UserMessage")
 
 # StreamEvent types that are control messages (no user-visible content)
@@ -92,11 +92,11 @@ def parse_sdk_message(sdk_message) -> tuple[str, str, str]:
     Parse an SDK message object and extract text content and metadata.
 
     This is the shared parser used by both the GUI and CLI to interpret
-    raw messages from the Claude Agent SDK and Codex.
+    raw messages from the Claude Agent SDK.
 
     Args:
-        sdk_message: Message object from Claude Agent SDK or plain text from Codex.
-                     Will be converted to str for parsing.
+        sdk_message: Message object from Claude Agent SDK, or a plain
+                     text fallback. Will be converted to str for parsing.
 
     Returns:
         tuple of (text_content, verbose_content, message_type) where:
@@ -105,7 +105,7 @@ def parse_sdk_message(sdk_message) -> tuple[str, str, str]:
             message_type: One of:
                 "text_delta"      - StreamEvent text chunk (streaming)
                 "assistant"       - AssistantMessage with TextBlock (complete)
-                "assistant_plain" - Codex plain text chunk
+                "assistant_plain" - Plain text chunk (unstructured fallback)
                 "content_block_start" - Start of new content block
                 "system"          - System/control message
                 "result"          - ResultMessage with metadata
@@ -190,7 +190,7 @@ def parse_sdk_message(sdk_message) -> tuple[str, str, str]:
         logger.warning(f"Failed to parse SDK message: {e}")
         text_content = message_str
 
-    # Plain text fallback (e.g., Codex responses)
+    # Plain text fallback (unstructured messages)
     if not is_structured and not text_content and message_str.strip():
         message_type = "assistant_plain"
         text_content = message_str

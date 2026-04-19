@@ -1,12 +1,11 @@
 [project]
 name = "flowcoder"
 version = "1.0.0"
-description = "A visual flowchart builder for creating custom automated workflows with Claude Code and Codex"
+description = "A visual flowchart builder for creating custom automated workflows with Claude Code (and OpenAI models via anthropic-proxy)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "claude-agent-sdk",
-    "codex-sdk",
     "pydantic>=2.0.0",
     "pygame>=2.5.0",
     "jsonschema>=4.19.0",

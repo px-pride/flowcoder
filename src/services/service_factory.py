@@ -1,8 +1,9 @@
 """
 Service Factory for creating AI service instances.
 
-Centralizes the logic for instantiating different types of AI services
-(Claude, Codex, Mock) based on service type.
+There is one underlying service class (`ClaudeAgentService`). The
+"Codex" service type is the same class with proxy env vars injected so
+the claude CLI routes through anthropic-proxy-rs to OpenAI.
 """
 
 import logging
@@ -10,9 +11,13 @@ from typing import Optional
 
 from .base_service import BaseService
 from .claude_service import ClaudeAgentService, MockClaudeService
-from .codex_service import CodexService, CODEX_SDK_AVAILABLE
 
 logger = logging.getLogger(__name__)
+
+
+# Default proxy settings for the "codex" service type
+DEFAULT_PROXY_URL = "http://127.0.0.1:3000"
+DEFAULT_PROXY_MODEL = "gpt-5.4"
 
 
 class ServiceFactoryError(Exception):
@@ -24,11 +29,11 @@ class ServiceFactory:
     """
     Factory for creating AI service instances.
 
-    Uses the Factory Pattern to centralize service creation logic.
-    This makes it easy to add new service types without modifying existing code.
+    "claude" -> ClaudeAgentService
+    "codex"  -> ClaudeAgentService with ANTHROPIC_BASE_URL/ANTHROPIC_MODEL set
+    "mock"   -> MockClaudeService
     """
 
-    # Map of service type names to display names
     SERVICE_DISPLAY_NAMES = {
         "claude": "Claude Code",
         "codex": "Codex",
@@ -49,13 +54,14 @@ class ServiceFactory:
             service_type: Type of service ("claude", "codex", or "mock")
             cwd: Working directory for the service
             system_prompt: System prompt for the AI
-            **kwargs: Additional service-specific parameters
+            **kwargs: Additional service-specific parameters. Recognized:
+                proxy_url, proxy_model — override defaults for "codex".
 
         Returns:
-            BaseService instance (ClaudeAgentService, CodexService, or MockClaudeService)
+            BaseService instance.
 
         Raises:
-            ServiceFactoryError: If service type is unknown or creation fails
+            ServiceFactoryError: If service type is unknown or creation fails.
         """
         service_type = service_type.lower().strip()
 
@@ -81,17 +87,6 @@ class ServiceFactory:
         system_prompt: Optional[str],
         **kwargs
     ) -> ClaudeAgentService:
-        """
-        Create a Claude Agent service instance.
-
-        Args:
-            cwd: Working directory
-            system_prompt: System prompt
-            **kwargs: Additional parameters (permission_mode, max_retries, etc.)
-
-        Returns:
-            ClaudeAgentService instance
-        """
         logger.info(f"Creating ClaudeAgentService (cwd={cwd})")
 
         return ClaudeAgentService(
@@ -99,9 +94,9 @@ class ServiceFactory:
             system_prompt=system_prompt,
             permission_mode=kwargs.get("permission_mode", "bypassPermissions"),
             max_retries=kwargs.get("max_retries", 3),
-            timeout_seconds=kwargs.get("timeout_seconds", None),  # Timeouts disabled
+            timeout_seconds=kwargs.get("timeout_seconds", None),
             stderr_callback=kwargs.get("stderr_callback"),
-            model=kwargs.get("model")
+            model=kwargs.get("model"),
         )
 
     @staticmethod
@@ -109,50 +104,42 @@ class ServiceFactory:
         cwd: str,
         system_prompt: Optional[str],
         **kwargs
-    ) -> CodexService:
+    ) -> ClaudeAgentService:
         """
-        Create a Codex service instance.
+        Create a ClaudeAgentService configured to route through anthropic-proxy.
 
-        Args:
-            cwd: Working directory
-            system_prompt: System prompt
-            **kwargs: Additional parameters (max_retries, timeout_seconds, etc.)
-
-        Returns:
-            CodexService instance
-
-        Raises:
-            ServiceFactoryError: If Codex SDK not available
+        The proxy must be running externally (see scripts/anthropic-codex-proxy/
+        in the personal-assistant repo, or the README).
         """
-        if not CODEX_SDK_AVAILABLE:
-            raise ServiceFactoryError(
-                "Codex SDK is not installed. "
-                "To use Codex, install it with: pip install codex-sdk"
-            )
+        proxy_url = kwargs.get("proxy_url") or DEFAULT_PROXY_URL
+        proxy_model = kwargs.get("proxy_model") or DEFAULT_PROXY_MODEL
 
-        logger.info(f"Creating CodexService (cwd={cwd})")
+        extra_env = {
+            "ANTHROPIC_BASE_URL": proxy_url,
+            "ANTHROPIC_MODEL": proxy_model,
+            # The proxy doesn't validate the API key, but the SDK requires one to be set
+            "ANTHROPIC_API_KEY": kwargs.get("anthropic_api_key", "proxy"),
+        }
 
-        return CodexService(
+        logger.info(
+            f"Creating Codex (proxied) ClaudeAgentService "
+            f"(cwd={cwd}, proxy={proxy_url}, model={proxy_model})"
+        )
+
+        return ClaudeAgentService(
             cwd=cwd,
             system_prompt=system_prompt,
+            permission_mode=kwargs.get("permission_mode", "bypassPermissions"),
             max_retries=kwargs.get("max_retries", 3),
-            timeout_seconds=kwargs.get("timeout_seconds", None),  # Timeouts disabled
-            stderr_callback=kwargs.get("stderr_callback")
+            timeout_seconds=kwargs.get("timeout_seconds", None),
+            stderr_callback=kwargs.get("stderr_callback"),
+            model=kwargs.get("model"),
+            extra_env=extra_env,
         )
 
     @staticmethod
     def _create_mock_service(cwd: str) -> MockClaudeService:
-        """
-        Create a mock service instance for testing.
-
-        Args:
-            cwd: Working directory
-
-        Returns:
-            MockClaudeService instance
-        """
         logger.info(f"Creating MockClaudeService (cwd={cwd})")
-
         return MockClaudeService(cwd=cwd)
 
     @staticmethod
@@ -161,44 +148,28 @@ class ServiceFactory:
         Get a dictionary of available service types and their availability.
 
         Returns:
-            Dict mapping service type to tuple of (display_name, is_available, reason)
+            Dict mapping service type to (display_name, is_available, reason).
         """
-        services = {}
-
-        # Claude is always available (uses try/catch for SDK import)
-        services["claude"] = (
-            ServiceFactory.SERVICE_DISPLAY_NAMES["claude"],
-            True,
-            "Claude Agent SDK"
-        )
-
-        # Codex availability depends on SDK installation
-        services["codex"] = (
-            ServiceFactory.SERVICE_DISPLAY_NAMES["codex"],
-            CODEX_SDK_AVAILABLE,
-            "Codex SDK" if CODEX_SDK_AVAILABLE else "Codex SDK not installed"
-        )
-
-        # Mock is always available
-        services["mock"] = (
-            ServiceFactory.SERVICE_DISPLAY_NAMES["mock"],
-            True,
-            "For testing only"
-        )
-
-        return services
+        return {
+            "claude": (
+                ServiceFactory.SERVICE_DISPLAY_NAMES["claude"],
+                True,
+                "Claude Agent SDK"
+            ),
+            "codex": (
+                ServiceFactory.SERVICE_DISPLAY_NAMES["codex"],
+                True,
+                "Routes through anthropic-proxy to OpenAI (proxy must be running)"
+            ),
+            "mock": (
+                ServiceFactory.SERVICE_DISPLAY_NAMES["mock"],
+                True,
+                "For testing only"
+            ),
+        }
 
     @staticmethod
     def get_service_display_name(service_type: str) -> str:
-        """
-        Get the display name for a service type.
-
-        Args:
-            service_type: Service type ("claude", "codex", "mock")
-
-        Returns:
-            Display name for the service
-        """
         return ServiceFactory.SERVICE_DISPLAY_NAMES.get(
             service_type.lower(),
             service_type.title()
@@ -206,15 +177,6 @@ class ServiceFactory:
 
     @staticmethod
     def is_service_available(service_type: str) -> bool:
-        """
-        Check if a service type is available.
-
-        Args:
-            service_type: Service type to check
-
-        Returns:
-            True if service is available, False otherwise
-        """
         services = ServiceFactory.get_available_services()
         if service_type.lower() in services:
             _, is_available, _ = services[service_type.lower()]

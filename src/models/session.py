@@ -102,7 +102,7 @@ class Session:
 
     Each session has its own:
     - Working directory
-    - AI service instance (Claude, Codex, or Mock)
+    - AI service instance (Claude or Mock — "Codex" is Claude with proxy env vars)
     - Execution controller
     - Chat history
     - Execution history
@@ -122,7 +122,7 @@ class Session:
     git_repo_url: str = ""
     git_branch: str = ""
     git_auto_push: bool = False
-    config_name: str = ""  # Name of the .claudeconfig or .codexconfig in use
+    config_name: str = ""  # Name of the .claudeconfig in use
 
     # Sound notification settings (None = disabled)
     sound_on_prompt_complete: Optional[str] = None  # Sound when prompt finishes

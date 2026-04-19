@@ -618,12 +618,7 @@ class GraphWalker:
                 f"Spawning agent '{agent_name}' running command '{command_name}'"
             )
 
-        try:
-            await child_session.start()
-        except ImportError:
-            return BlockResult.fail(
-                "Backend 'codex' requires 'codex-app-server-sdk' which is not installed"
-            )
+        await child_session.start()
 
         child_walker = GraphWalker(
             cmd.flowchart,

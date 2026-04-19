@@ -14,8 +14,8 @@ SessionCreator = Callable[[str, str | None], BaseSession]
 class SessionFactory:
     """Registry of backend session creators.
 
-    Each backend (e.g. "claude", "codex") is registered with a creator
-    function that produces a BaseSession given a name and optional model.
+    Each backend (e.g. "claude") is registered with a creator function
+    that produces a BaseSession given a name and optional model.
     """
 
     def __init__(self) -> None:

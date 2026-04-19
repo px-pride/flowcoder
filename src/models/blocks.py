@@ -696,7 +696,7 @@ class SpawnBlock(Block):
     arguments: str = ""
     inherit_variables: bool = False
     exit_code_variable: str = ""
-    config_file: str = ""  # .claudeconfig or .codexconfig to use
+    config_file: str = ""  # .claudeconfig to use
 
     def __init__(
         self,

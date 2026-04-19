@@ -125,7 +125,7 @@ class CLIAgent:
             system_prompt: System prompt for the AI
             session_name: Name for this session
             debug: Enable verbose/debug output
-            config_name: Name of config file to load (.claudeconfig/.codexconfig)
+            config_name: Name of config file to load (.claudeconfig)
             flowchart_cmd: Non-interactive mode: [command, arg1, arg2, ...]
         """
         self.cwd = os.path.abspath(cwd or os.getcwd())

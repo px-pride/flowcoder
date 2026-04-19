@@ -2,14 +2,18 @@
 Config Service for FlowCoder
 
 Handles persistence and management of agent configuration files.
-Supports both Claude Code (.claudeconfig) and Codex (.codexconfig) formats.
+
+Single config format (`.claudeconfig`) drives both Claude Code and Codex
+sessions. A config with `proxy_url` set is treated as a Codex config — when
+the session starts, those env vars are injected into the claude subprocess so
+it routes through anthropic-proxy-rs (translating Anthropic API → OpenAI).
 """
 
 import json
 import logging
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 
 
 logger = logging.getLogger(__name__)
@@ -40,12 +44,18 @@ class CorruptedConfigError(ConfigError):
 
 
 # ---------------------------------------------------------------------------
-# Config dataclasses
+# Config dataclass
 # ---------------------------------------------------------------------------
 
 @dataclass
 class ClaudeConfig:
-    """Configuration for a Claude Code agent."""
+    """Configuration for an agent session.
+
+    A "Codex" session is just a ClaudeConfig with `proxy_url` set — the
+    session spawns the claude CLI with `ANTHROPIC_BASE_URL=proxy_url` and
+    `ANTHROPIC_MODEL=proxy_model` so requests route through the local
+    anthropic-proxy translator to OpenAI.
+    """
 
     name: str
     model: str = "claude-opus-4-5"
@@ -53,11 +63,17 @@ class ClaudeConfig:
     thinking: Dict[str, Any] = field(default_factory=lambda: {"type": "adaptive"})
     max_output_tokens: int = 64000
     system_prompt: Optional[str] = None
+    proxy_url: Optional[str] = None
+    proxy_model: Optional[str] = None
+
+    @property
+    def is_codex(self) -> bool:
+        """True if this config routes through the anthropic-proxy."""
+        return bool(self.proxy_url)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a plain dictionary suitable for JSON."""
         data = asdict(self)
-        # Strip None values to keep the file clean
         return {k: v for k, v in data.items() if v is not None}
 
     @classmethod
@@ -70,31 +86,8 @@ class ClaudeConfig:
             thinking=data.get("thinking", {"type": "adaptive"}),
             max_output_tokens=data.get("max_output_tokens", 64000),
             system_prompt=data.get("system_prompt"),
-        )
-
-
-@dataclass
-class CodexConfig:
-    """Configuration for a Codex agent."""
-
-    name: str
-    model: str = "o4-mini"
-    approval_mode: str = "full-auto"
-    system_prompt: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize to a plain dictionary suitable for JSON."""
-        data = asdict(self)
-        return {k: v for k, v in data.items() if v is not None}
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "CodexConfig":
-        """Deserialize from a dictionary."""
-        return cls(
-            name=data["name"],
-            model=data.get("model", "o4-mini"),
-            approval_mode=data.get("approval_mode", "full-auto"),
-            system_prompt=data.get("system_prompt"),
+            proxy_url=data.get("proxy_url"),
+            proxy_model=data.get("proxy_model"),
         )
 
 
@@ -102,25 +95,14 @@ class CodexConfig:
 # File-extension helpers
 # ---------------------------------------------------------------------------
 
-_CLAUDE_EXT = ".claudeconfig"
-_CODEX_EXT = ".codexconfig"
-_ALL_EXTENSIONS = (_CLAUDE_EXT, _CODEX_EXT)
-
-
-def _config_type_for_path(path: Path) -> str:
-    """Return 'claude' or 'codex' based on the file extension."""
-    if path.suffix == _CLAUDE_EXT:
-        return "claude"
-    if path.suffix == _CODEX_EXT:
-        return "codex"
-    raise ConfigError(f"Unrecognised config extension: {path.suffix}")
+_CONFIG_EXT = ".claudeconfig"
 
 
 # ---------------------------------------------------------------------------
 # Default configs
 # ---------------------------------------------------------------------------
 
-_DEFAULT_CONFIGS: List[Union[ClaudeConfig, CodexConfig]] = [
+_DEFAULT_CONFIGS: List[ClaudeConfig] = [
     ClaudeConfig(
         name="claude-max",
         model="claude-opus-4-5",
@@ -135,15 +117,23 @@ _DEFAULT_CONFIGS: List[Union[ClaudeConfig, CodexConfig]] = [
         thinking={"type": "disabled"},
         max_output_tokens=16000,
     ),
-    CodexConfig(
+    ClaudeConfig(
         name="codex-max",
-        model="o4-mini",
-        approval_mode="full-auto",
+        model="claude-opus-4-5",
+        permission_mode="bypassPermissions",
+        thinking={"type": "adaptive"},
+        max_output_tokens=64000,
+        proxy_url="http://127.0.0.1:3000",
+        proxy_model="gpt-5.4",
     ),
-    CodexConfig(
+    ClaudeConfig(
         name="codex-min",
-        model="o4-mini",
-        approval_mode="suggest",
+        model="claude-opus-4-5",
+        permission_mode="bypassPermissions",
+        thinking={"type": "adaptive"},
+        max_output_tokens=64000,
+        proxy_url="http://127.0.0.1:3000",
+        proxy_model="gpt-5.4-mini",
     ),
 ]
 
@@ -178,26 +168,14 @@ class ConfigService:
             logger.error(f"Failed to create configs directory: {e}")
             raise ConfigError(f"Could not create configs directory: {e}")
 
-    def _get_config_file_path(
-        self, name: str, config_type: str = "claude"
-    ) -> Path:
-        """
-        Build the full path for a config file.
-
-        Args:
-            name: Config name (used as the filename stem).
-            config_type: Either ``'claude'`` or ``'codex'``.
-
-        Returns:
-            Absolute path to the config file.
-        """
+    def _get_config_file_path(self, name: str) -> Path:
+        """Build the full path for a config file."""
         safe_name = name.replace(" ", "_")
-        ext = _CLAUDE_EXT if config_type == "claude" else _CODEX_EXT
-        return self.configs_dir / f"{safe_name}{ext}"
+        return self.configs_dir / f"{safe_name}{_CONFIG_EXT}"
 
     def _resolve_config_path(self, name: str) -> Path:
         """
-        Find the on-disk path for *name*, trying both extensions.
+        Find the on-disk path for *name*.
 
         Args:
             name: Config name.
@@ -208,41 +186,31 @@ class ConfigService:
         Raises:
             ConfigNotFoundError: If no matching file exists.
         """
-        safe_name = name.replace(" ", "_")
-        for ext in _ALL_EXTENSIONS:
-            path = self.configs_dir / f"{safe_name}{ext}"
-            if path.exists():
-                return path
+        path = self._get_config_file_path(name)
+        if path.exists():
+            return path
         raise ConfigNotFoundError(f"Config '{name}' not found")
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def save_config(
-        self, config: Union[ClaudeConfig, CodexConfig], overwrite: bool = True
-    ) -> None:
+    def save_config(self, config: ClaudeConfig, overwrite: bool = True) -> None:
         """
         Save a config to disk.
 
         Args:
-            config: A ``ClaudeConfig`` or ``CodexConfig`` instance.
+            config: A ``ClaudeConfig`` instance.
             overwrite: If *False*, raise an error when the file already exists.
 
         Raises:
             ConfigAlreadyExistsError: If the config exists and *overwrite* is False.
             ConfigError: On I/O failures.
         """
-        if isinstance(config, ClaudeConfig):
-            config_type = "claude"
-        elif isinstance(config, CodexConfig):
-            config_type = "codex"
-        else:
-            raise ConfigError(
-                f"Unsupported config type: {type(config).__name__}"
-            )
+        if not isinstance(config, ClaudeConfig):
+            raise ConfigError(f"Unsupported config type: {type(config).__name__}")
 
-        file_path = self._get_config_file_path(config.name, config_type)
+        file_path = self._get_config_file_path(config.name)
 
         if file_path.exists() and not overwrite:
             raise ConfigAlreadyExistsError(
@@ -260,18 +228,15 @@ class ConfigService:
             logger.error(f"Failed to save config '{config.name}': {e}")
             raise ConfigError(f"Could not save config: {e}")
 
-    def load_config(self, name: str) -> Union[ClaudeConfig, CodexConfig]:
+    def load_config(self, name: str) -> ClaudeConfig:
         """
         Load a config from disk.
-
-        The method determines whether the config is a Claude or Codex config
-        based on its file extension.
 
         Args:
             name: Config name (without extension).
 
         Returns:
-            A ``ClaudeConfig`` or ``CodexConfig`` instance.
+            A ``ClaudeConfig`` instance.
 
         Raises:
             ConfigNotFoundError: If no matching file exists.
@@ -279,17 +244,12 @@ class ConfigService:
             ConfigError: On other I/O failures.
         """
         file_path = self._resolve_config_path(name)
-        config_type = _config_type_for_path(file_path)
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            if config_type == "claude":
-                config = ClaudeConfig.from_dict(data)
-            else:
-                config = CodexConfig.from_dict(data)
-
+            config = ClaudeConfig.from_dict(data)
             logger.info(f"Loaded config '{name}' from {file_path}")
             return config
 
@@ -314,9 +274,11 @@ class ConfigService:
         Returns:
             A list of dictionaries, each containing:
             - ``name``:        Config name.
-            - ``config_type``: ``'claude'`` or ``'codex'``.
+            - ``config_type``: ``'claude'`` or ``'codex'`` (based on whether proxy_url set).
             - ``model``:       Model identifier.
+            - ``proxy_model``: Proxy model identifier (codex configs only).
             - ``file_path``:   Full path to the config file.
+            - ``permission_mode``, ``max_output_tokens``: standard fields.
 
         Raises:
             ConfigError: On I/O failures.
@@ -324,44 +286,34 @@ class ConfigService:
         configs: List[Dict[str, Any]] = []
 
         try:
-            for ext in _ALL_EXTENSIONS:
-                for file_path in self.configs_dir.glob(f"*{ext}"):
-                    try:
-                        config_type = _config_type_for_path(file_path)
+            for file_path in self.configs_dir.glob(f"*{_CONFIG_EXT}"):
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
 
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
+                    proxy_url = data.get("proxy_url")
+                    metadata: Dict[str, Any] = {
+                        "name": data.get("name", file_path.stem),
+                        "config_type": "codex" if proxy_url else "claude",
+                        "model": data.get("model", ""),
+                        "file_path": str(file_path),
+                        "permission_mode": data.get("permission_mode", ""),
+                        "max_output_tokens": data.get("max_output_tokens", 0),
+                    }
+                    if proxy_url:
+                        metadata["proxy_url"] = proxy_url
+                        metadata["proxy_model"] = data.get("proxy_model", "")
 
-                        metadata: Dict[str, Any] = {
-                            "name": data.get("name", file_path.stem),
-                            "config_type": config_type,
-                            "model": data.get("model", ""),
-                            "file_path": str(file_path),
-                        }
+                    configs.append(metadata)
 
-                        # Include type-specific fields in metadata
-                        if config_type == "claude":
-                            metadata["permission_mode"] = data.get(
-                                "permission_mode", ""
-                            )
-                            metadata["max_output_tokens"] = data.get(
-                                "max_output_tokens", 0
-                            )
-                        else:
-                            metadata["approval_mode"] = data.get(
-                                "approval_mode", ""
-                            )
-
-                        configs.append(metadata)
-
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            f"Skipping corrupted config file: {file_path}"
-                        )
-                        continue
-                    except Exception as e:
-                        logger.warning(f"Error reading {file_path}: {e}")
-                        continue
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Skipping corrupted config file: {file_path}"
+                    )
+                    continue
+                except Exception as e:
+                    logger.warning(f"Error reading {file_path}: {e}")
+                    continue
 
             configs.sort(key=lambda c: c["name"])
             logger.info(f"Found {len(configs)} configs")
@@ -399,13 +351,9 @@ class ConfigService:
             name: Config name.
 
         Returns:
-            ``True`` if a ``.claudeconfig`` or ``.codexconfig`` file exists.
+            ``True`` if a ``.claudeconfig`` file exists.
         """
-        safe_name = name.replace(" ", "_")
-        for ext in _ALL_EXTENSIONS:
-            if (self.configs_dir / f"{safe_name}{ext}").exists():
-                return True
-        return False
+        return self._get_config_file_path(name).exists()
 
     def ensure_defaults(self) -> None:
         """
@@ -419,8 +367,6 @@ class ConfigService:
                     self.save_config(config, overwrite=False)
                     logger.info(f"Created default config: {config.name}")
                 except ConfigAlreadyExistsError:
-                    # Race-condition guard; another process may have created
-                    # the file between the exists-check and the save call.
                     pass
                 except Exception as e:
                     logger.error(

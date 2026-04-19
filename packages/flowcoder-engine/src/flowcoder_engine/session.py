@@ -71,9 +71,9 @@ def _clean_env() -> dict[str, str]:
 class BaseSession(ABC):
     """Backend-agnostic session interface.
 
-    All session implementations (ClaudeSession, future CodexSession, etc.)
-    must implement these methods.  Walker and other engine components
-    depend only on this interface.
+    All session implementations (e.g. ClaudeSession) must implement
+    these methods.  Walker and other engine components depend only on
+    this interface.
     """
 
     @property

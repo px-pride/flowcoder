@@ -146,23 +146,6 @@ wheels = [
 ]
 
 [[package]]
-name = "codex-sdk"
-version = "0.1.0a34"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "distro" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sniffio" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/34/a8/cca5c101d36c75d2e0d38e45e884a43cd50946166533102640d003db108f/codex_sdk-0.1.0a34.tar.gz", hash = "sha256:8bd5b8efb6d0b34e6c3ed9450916d310b4e6382f23847f18abbb5288c4c62c57", size = 172145, upload-time = "2025-11-19T19:09:43.237Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8f/c2/8ab1bb51a2f21d3e8268c37238d556573b034b6a842f866554a8e0d6ade3/codex_sdk-0.1.0a34-py3-none-any.whl", hash = "sha256:24a208fc41700963d29f1da2840fcc3b9a9d636d7c6484eb2c828b42cad82e7f", size = 200305, upload-time = "2025-11-19T19:09:42.054Z" },
-]
-
-[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -302,22 +285,12 @@ wheels = [
 ]
 
 [[package]]
-name = "distro"
-version = "1.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
-]
-
-[[package]]
 name = "flowcoder"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "asyncio-throttle" },
     { name = "claude-agent-sdk" },
-    { name = "codex-sdk" },
     { name = "jsonpath-ng" },
     { name = "jsonschema" },
     { name = "pydantic" },
@@ -338,7 +311,6 @@ dev = [
 requires-dist = [
     { name = "asyncio-throttle", specifier = ">=1.0.0" },
     { name = "claude-agent-sdk" },
-    { name = "codex-sdk" },
     { name = "jsonpath-ng", specifier = ">=1.6.0" },
     { name = "jsonschema", specifier = ">=4.19.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },

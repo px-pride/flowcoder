@@ -432,7 +432,8 @@ class SessionTabWidget(ttk.Frame):
         Delegates to the shared utility in src.utils.sdk_message_parser.
 
         Args:
-            sdk_message: Message object from Claude Agent SDK or plain text from Codex
+            sdk_message: Message object from Claude Agent SDK (or a plain
+                text fallback for unstructured chunks)
 
         Returns:
             tuple: (text_content, verbose_content, message_type)
@@ -486,8 +487,8 @@ class SessionTabWidget(ttk.Frame):
 
                 # Display assistant messages (both structured and plain text)
                 if message_type in ("assistant", "assistant_plain") and text_content:
-                    # Only add paragraph breaks between structured messages (Claude TextBlocks)
-                    # NOT between plain text chunks (Codex arbitrary substrings)
+                    # Only add paragraph breaks between structured TextBlocks,
+                    # not between unstructured plain-text chunks.
                     if message_type == "assistant" and had_previous_text and response_text:
                         response_text += "\n\n"
                         self.chat_panel.add_streaming_text("\n\n", tag=service_tag)
@@ -1024,7 +1025,7 @@ class SessionTabWidget(ttk.Frame):
                     self._had_previous_text_in_stream = True
 
             elif message_type == "assistant_plain":
-                # Plain text from services like Codex - display immediately, no paragraph breaks
+                # Unstructured plain-text fallback - display immediately, no paragraph breaks
                 if text_content:
                     # Log exactly what's being displayed
                     if hasattr(self, '_stream_debug_log') and self._stream_debug_log:

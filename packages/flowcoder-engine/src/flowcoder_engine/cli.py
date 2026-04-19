@@ -53,12 +53,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=1000,
         help="Maximum number of blocks to execute per flowchart (safety limit)",
     )
-    parser.add_argument(
-        "--backend",
-        choices=["claude", "codex"],
-        default="claude",
-        help="AI backend to use: claude (default) or codex (OpenAI Codex SDK)",
-    )
 
     # --- Claude settings (forwarded to inner claude) ---
     # These provide a clean interface for SDK users who don't want to know

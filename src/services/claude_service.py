@@ -86,7 +86,8 @@ class ClaudeAgentService(BaseService):
         max_retries: int = 3,
         timeout_seconds: int = 300,
         stderr_callback: Optional[callable] = None,
-        model: Optional[str] = "claude-opus-4-5"
+        model: Optional[str] = "claude-opus-4-5",
+        extra_env: Optional[Dict[str, str]] = None
     ):
         """
         Initialize the Claude Agent Service.
@@ -99,6 +100,9 @@ class ClaudeAgentService(BaseService):
             timeout_seconds: Timeout for operations in seconds
             stderr_callback: Optional callback for Claude Code's verbose output (tool calls, thinking, etc.)
             model: Optional model identifier (e.g., "claude-haiku-4", "claude-sonnet-4-5-20250929")
+            extra_env: Additional env vars to inject into the claude subprocess.
+                Used to route requests through anthropic-proxy-rs for Codex/GPT models
+                via ANTHROPIC_BASE_URL and ANTHROPIC_MODEL.
         """
         if not CLAUDE_SDK_AVAILABLE:
             raise ClaudeServiceError(
@@ -113,6 +117,7 @@ class ClaudeAgentService(BaseService):
         self.timeout_seconds = timeout_seconds
         self.stderr_callback = stderr_callback
         self.model = model
+        self.extra_env = extra_env or {}
 
         self._client: Optional[Any] = None
         self._session_active = False
@@ -142,6 +147,7 @@ class ClaudeAgentService(BaseService):
         instance.timeout_seconds = 300
         instance.stderr_callback = None
         instance.model = None
+        instance.extra_env = {}
         instance._client = client
         instance._session_active = True
         instance._external_client = True
@@ -167,13 +173,14 @@ class ClaudeAgentService(BaseService):
             # When system_prompt is None/empty, we don't pass it at all so
             # Claude Code uses its built-in default (passing None would cause
             # the SDK to pass --system-prompt "" which overrides the default)
+            env = {"CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000"}
+            env.update(self.extra_env)
+
             options_kwargs = {
                 "permission_mode": self.permission_mode,
                 "cwd": self.cwd,
                 "model": self.model,
-                "env": {
-                    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000"
-                },
+                "env": env,
                 "include_partial_messages": True,  # Show intermediate reasoning as it happens
                 "stderr": self.stderr_callback,  # Capture tool calls, thinking, file operations
                 "setting_sources": ["user", "project", "local"]

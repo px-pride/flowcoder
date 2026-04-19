@@ -101,7 +101,7 @@ class ExecutionController:
         Initialize execution controller.
 
         Args:
-            agent_service: AI agent service instance (ClaudeAgentService, CodexService, or MockClaudeService)
+            agent_service: AI agent service instance (ClaudeAgentService or MockClaudeService)
             storage_service: Storage service for loading commands (required for command blocks)
             on_execution_start: Callback fired when command execution starts (command_name, context)
             on_block_start: Callback fired when block execution starts
@@ -954,7 +954,7 @@ class ExecutionController:
         Handles three formats:
         1. Claude AssistantMessage with TextBlock (legacy)
         2. Claude StreamEvent format (new SDK)
-        3. Codex plain text chunks
+        3. Plain text fallback for unstructured messages
 
         Args:
             message_str: String representation of SDK message
@@ -1024,8 +1024,7 @@ class ExecutionController:
 
             return ""
 
-        # 3. Codex plain text chunks - return as-is if not a structured message
-        # Codex sends plain text strings (50 char chunks)
+        # 3. Plain text fallback - return as-is if not a structured message.
         # IMPORTANT: Don't return SDK message representations as text!
         if message_str.strip():
             # Check if this looks like an SDK message representation
@@ -1654,16 +1653,18 @@ class ExecutionController:
             service_type = "claude"  # Default
             service_kwargs = {}
             if block.config_file:
-                # Load config to determine service type
                 try:
                     from src.services.config_service import ConfigService
                     config_svc = ConfigService()
                     config = config_svc.load_config(block.config_file)
-                    if hasattr(config, 'model'):
+                    if config.model:
                         service_kwargs["model"] = config.model
-                    # Detect if codex config
-                    if block.config_file.endswith('.codexconfig'):
+                    # A config with proxy_url set is a "Codex" config
+                    if config.proxy_url:
                         service_type = "codex"
+                        service_kwargs["proxy_url"] = config.proxy_url
+                        if config.proxy_model:
+                            service_kwargs["proxy_model"] = config.proxy_model
                 except Exception as e:
                     logger.warning(f"Could not load config '{block.config_file}': {e}")
 

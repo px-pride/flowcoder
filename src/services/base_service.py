@@ -1,7 +1,7 @@
 """
 Base Service Interface for AI Services
 
-Defines the abstract interface that all AI services (Claude, Codex, Mock) must implement.
+Defines the abstract interface that all AI services (Claude, Mock) must implement.
 This ensures compatibility with ExecutionController and other components.
 """
 
@@ -13,7 +13,7 @@ class BaseService(ABC):
     """
     Abstract base class for AI services.
 
-    All AI service implementations (ClaudeAgentService, CodexService, MockClaudeService)
+    All AI service implementations (ClaudeAgentService, MockClaudeService)
     must inherit from this class and implement all abstract methods.
 
     This ensures they can be used interchangeably via dependency injection.

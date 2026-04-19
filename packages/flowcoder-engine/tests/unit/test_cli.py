@@ -51,19 +51,6 @@ class TestParseArgs:
         assert args.model == "opus"
         assert args.system_prompt == "test"
 
-    def test_backend_default(self):
-        args = parse_args([])
-        assert args.backend == "claude"
-
-    def test_backend_codex(self):
-        args = parse_args(["--backend", "codex"])
-        assert args.backend == "codex"
-
-    def test_backend_invalid(self):
-        with pytest.raises(SystemExit):
-            parse_args(["--backend", "invalid"])
-
-
 class TestBuildVariables:
     def test_from_args_string(self):
         declared = [Argument(name="file"), Argument(name="mode", required=False, default="strict")]

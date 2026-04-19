@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Stress test runner for Codex integration.
-# Runs each stress-test flowchart through the engine with --backend codex
-# and reports pass/fail.
+# Stress test runner for the flowcoder engine.
+# Runs each stress-test flowchart through the engine and reports pass/fail.
+# To exercise the codex/proxy path, export ANTHROPIC_BASE_URL and
+# ANTHROPIC_MODEL before running this script.
 
 set -euo pipefail
 
@@ -37,7 +38,7 @@ run_test() {
     local output
     if output=$(printf '%s\n%s\n' "$user_msg" "$shutdown_msg" | \
         timeout "$timeout_secs" \
-        "$PYTHON" -m flowcoder_engine --backend codex --search-path "$SEARCH_PATH" 2>/dev/null); then
+        "$PYTHON" -m flowcoder_engine --search-path "$SEARCH_PATH" 2>/dev/null); then
         :
     else
         local rc=$?
@@ -98,7 +99,7 @@ run_test() {
 }
 
 echo "======================================"
-echo " Codex Integration Stress Tests"
+echo " Engine Stress Tests"
 echo "======================================"
 echo "Search path: $SEARCH_PATH"
 echo "Engine dir: $ENGINE_DIR"

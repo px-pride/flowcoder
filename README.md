@@ -2,7 +2,7 @@
 
 [![Watch the demo](https://img.youtube.com/vi/1COOR6UmpsY/maxresdefault.jpg)](https://www.youtube.com/watch?v=1COOR6UmpsY)
 
-Create and execute custom automated workflows for Claude Code and Codex, via a visual flowchart builder.
+Create and execute custom automated workflows for Claude Code, via a visual flowchart builder. OpenAI models (e.g. GPT-5) are supported through [anthropic-proxy-rs](https://github.com/maxnowack/anthropic-proxy) — see "Codex / GPT models" below.
 
 ![Flowchart Example](./images/flowchart-example.png)
 
@@ -115,6 +115,24 @@ Sessions are isolated execution environments with their own working directory an
 3. Select a command and click **Run** (or use the play button)
 4. Watch execution progress in the flowchart canvas
 5. View results in the chat panel
+
+### Codex / GPT models (via proxy)
+
+When creating a session you can pick "Codex" instead of "Claude Code". Under
+the hood this still spawns the `claude` binary, but with `ANTHROPIC_BASE_URL`
+and `ANTHROPIC_MODEL` set so requests are routed through
+[anthropic-proxy-rs](https://github.com/maxnowack/anthropic-proxy), which
+translates them to the OpenAI Chat Completions API.
+
+To use this:
+
+1. Install and run the proxy on `http://127.0.0.1:3000` (default — see the
+   proxy's README for setup and OpenAI key configuration).
+2. Pick a config like `codex-max` or `codex-min` when creating the session.
+3. The "Codex" backend is otherwise identical to the "Claude Code" one — same
+   flowcharts, same blocks, same tools.
+
+The proxy is external; FlowCoder does not start or manage its lifecycle.
 
 ## Git Integration
 
