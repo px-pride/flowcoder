@@ -1,0 +1,61 @@
+# Ignore everything by default
+*
+
+# Allow src/ directory and all its contents
+!src/
+!src/**
+
+# But ignore __pycache__ everywhere
+__pycache__/
+
+# Allow specific files in commands/ (must un-ignore dir first, contents still ignored by *)
+!commands/
+!commands/ex0-design-doc.json
+!commands/ex1-do-until-done.json
+!commands/ex2-testing-loop.json
+!commands/ex3-improve-project.json
+!commands/all-examples.json
+
+# Allow specific images in images/
+!images/
+!images/flowchart-example.png
+
+# Allow root level files
+!pyproject.toml
+!README.md
+!uv.lock
+!LICENSE
+
+# Allow .gitignore itself
+!.gitignore
+
+# Allow .github directory
+!.github/
+!.github/**
+
+# Allow .python-version
+!.python-version
+
+# Allow package.json and package-lock.json for npm dependencies
+!package.json
+!package-lock.json
+
+# Allow packages/ directory (vendored Pydantic packages)
+!packages/
+!packages/**
+
+# Allow tests/ directory
+!tests/
+!tests/**
+
+# Allow scripts/
+!scripts/
+!scripts/**
+
+# Allow design_docs/
+!design_docs/
+!design_docs/**
+
+# Allow progress-reports/
+!progress-reports/
+!progress-reports/**
