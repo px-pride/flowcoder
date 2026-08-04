@@ -43,6 +43,9 @@ class GUIProtocolBridge(ProtocolHandler):
         on_execution_complete: Optional[Callable[[ExecutionContext], None]] = None,
         on_prompt_stream: Optional[Callable[[str, str], None]] = None,
         on_stderr: Optional[Callable[[str], None]] = None,
+        on_block_timeout: Optional[
+            Callable[[Block, int, int, ExecutionContext], None]
+        ] = None,
     ) -> None:
         super().__init__()
         self._flowchart = flowchart
@@ -53,6 +56,7 @@ class GUIProtocolBridge(ProtocolHandler):
         self._on_execution_complete = on_execution_complete
         self._on_prompt_stream = on_prompt_stream
         self._on_stderr = on_stderr
+        self._on_block_timeout = on_block_timeout
 
     # -- Lifecycle: no stdin/stdout I/O needed --
 
@@ -82,13 +86,62 @@ class GUIProtocolBridge(ProtocolHandler):
                 self._on_block_start(block, self._context)
 
     def emit_block_complete(
-        self, block_id: str, block_name: str, success: bool
+        self,
+        block_id: str,
+        block_name: str,
+        success: bool,
+        session_id: str | None = None,
     ) -> None:
+        # session_id is accepted and ignored: the engine passes it (walker.py
+        # from 0eb5807 onward) so out-of-process drivers can keep their stored
+        # id in sync, but the GUI owns the session object and reads the id from
+        # GUISessionAdapter. Same as emit_flowchart_complete below.
         if self._on_block_complete:
             block = self._flowchart.blocks.get(block_id)
             if block:
                 result = BlockResult(success=success)
                 self._on_block_complete(block, result, self._context)
+
+    def emit_block_timeout(
+        self,
+        block_id: str,
+        block_name: str,
+        block_type: str,
+        elapsed_ms: int,
+        timeout_seconds: int,
+    ) -> None:
+        """Surface block timeouts in the GUI.
+
+        Without this override the inherited ProtocolHandler version calls
+        emit_system -> self.emit, and emit (line 67) forwards only
+        type == "result". A block_timeout is type "system", so it would be
+        discarded — and it never reaches stdout either, because the emit
+        override exists to suppress stdout writes. The result is a timeout
+        that is invisible in the UI.
+        """
+        log.warning(
+            "[engine] block %s (%s) timed out after %dms (limit %ds)",
+            block_name,
+            block_type,
+            elapsed_ms,
+            timeout_seconds,
+        )
+        block = self._flowchart.blocks.get(block_id)
+        if self._on_block_timeout:
+            if block:
+                self._on_block_timeout(
+                    block, elapsed_ms, timeout_seconds, self._context
+                )
+            return
+
+        # No dedicated handler wired: fall back to the prompt stream, which the
+        # GUI already displays, so the timeout is visible rather than dropped.
+        if self._on_prompt_stream:
+            self._on_prompt_stream(
+                block_name,
+                f"\n[timeout] Block '{block_name}' ({block_type}) exceeded its "
+                f"{timeout_seconds}s limit after {elapsed_ms}ms.\n",
+            )
 
     # -- Flowchart lifecycle events --
 

@@ -123,6 +123,88 @@ class TestBlockComplete:
 
         cb.assert_not_called()
 
+    def test_accepts_session_id_kwarg(self):
+        """walker.py passes session_id= from engine commit 0eb5807 onward."""
+        cb = MagicMock()
+        bridge = _make_bridge(on_block_complete=cb)
+
+        bridge.emit_block_complete("p", "Prompt", True, session_id="sess-123")
+
+        cb.assert_called_once()
+        assert cb.call_args[0][1].success is True
+
+    def test_session_id_is_optional(self):
+        cb = MagicMock()
+        bridge = _make_bridge(on_block_complete=cb)
+
+        bridge.emit_block_complete("p", "Prompt", True)
+
+        cb.assert_called_once()
+
+
+class TestBlockTimeout:
+    """The inherited ProtocolHandler.emit_block_timeout routes through
+    emit_system -> emit, and this bridge's emit forwards only type=="result",
+    so an un-overridden timeout is silently discarded."""
+
+    def test_calls_dedicated_callback(self):
+        cb = MagicMock()
+        fc = _make_flowchart()
+        ctx = _make_context()
+        bridge = _make_bridge(fc, ctx, on_block_timeout=cb)
+
+        bridge.emit_block_timeout("p", "Prompt", "prompt", 61000, 60)
+
+        cb.assert_called_once()
+        block_arg, elapsed_arg, limit_arg, ctx_arg = cb.call_args[0]
+        assert block_arg is fc.blocks["p"]
+        assert elapsed_arg == 61000
+        assert limit_arg == 60
+        assert ctx_arg is ctx
+
+    def test_falls_back_to_prompt_stream_when_no_handler(self):
+        stream = MagicMock()
+        bridge = _make_bridge(on_prompt_stream=stream)
+
+        bridge.emit_block_timeout("p", "Prompt", "prompt", 61000, 60)
+
+        stream.assert_called_once()
+        block_name, text = stream.call_args[0]
+        assert block_name == "Prompt"
+        assert "timeout" in text.lower()
+        assert "60" in text and "61000" in text
+
+    def test_dedicated_callback_suppresses_stream_fallback(self):
+        cb = MagicMock()
+        stream = MagicMock()
+        bridge = _make_bridge(on_block_timeout=cb, on_prompt_stream=stream)
+
+        bridge.emit_block_timeout("p", "Prompt", "prompt", 61000, 60)
+
+        cb.assert_called_once()
+        stream.assert_not_called()
+
+    def test_unknown_block_id_still_reports_via_stream(self):
+        cb = MagicMock()
+        stream = MagicMock()
+        bridge = _make_bridge(on_block_timeout=cb, on_prompt_stream=stream)
+
+        bridge.emit_block_timeout("nonexistent", "Ghost", "prompt", 1, 60)
+
+        cb.assert_not_called()
+        stream.assert_not_called()
+
+    def test_no_callbacks_no_error(self):
+        bridge = _make_bridge()
+        bridge.emit_block_timeout("p", "Prompt", "prompt", 61000, 60)
+
+    def test_does_not_write_stdout(self, capsys):
+        bridge = _make_bridge()
+
+        bridge.emit_block_timeout("p", "Prompt", "prompt", 61000, 60)
+
+        assert capsys.readouterr().out == ""
+
 
 # -- Flowchart lifecycle --
 
