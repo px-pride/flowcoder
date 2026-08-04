@@ -1,0 +1,84 @@
+[project]
+name = "flowcoder-tk-gui"
+version = "1.0.0"
+description = "Tkinter GUI for FlowCoder — visual flowchart builder for automated workflows"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flowcoder-engine>=0.1.0",
+    "flowcoder-flowchart>=0.1.0",
+    "pydantic>=2.0.0",
+    "pygame>=2.5.0",
+    "jsonschema>=4.19.0",
+    "jsonpath-ng>=1.6.0",
+    "asyncio-throttle>=1.0.0",
+    "tkfilebrowser>=2.3.2",
+]
+
+[tool.uv.sources]
+# flowcoder-engine and flowcoder-flowchart are not published to PyPI; they
+# live in the engine repo under packages/. https + a pinned rev matches
+# leo-axi's pyproject.toml.
+#
+# THE ENGINE MOVED. It now lives at github.com/Gaia-PBC/flowcoder-core.
+# The previous URL here, github.com/px-pride/flowcoder, is THIS repository
+# as of the rename — so a pin left pointing at it would resolve the engine
+# to the GUI itself. That is the main reason this block changed.
+#
+# Pinned to 0897526 — master HEAD of flowcoder-core, the merge of PR #9,
+# by which point all four stacked PRs (#4 -> #6 -> #8 -> #9) had landed and
+# the monorepo had become engine-only.
+#
+# The pin criterion is PROTOCOL COMPATIBILITY: from engine commit 0eb5807
+# onward, walker.py passes session_id= to emit_block_complete and calls
+# emit_block_timeout, both of which the bridge in
+# src/adapters/protocol_bridge.py handles.
+#
+# This is an ADDRESS CHANGE, NOT A VERSION BUMP. The engine trees at the
+# previously pinned 45c078e and at 0897526 are byte-identical — verified by
+# comparing subtree hashes, 86f598b for flowcoder-engine and 03da15a for
+# flowcoder-flowchart in both. Nothing this GUI calls changed.
+#
+# The old rev is now unreachable from any branch: the stack was rebased
+# before merging, so 45c078e is NOT an ancestor of master (its content
+# landed as 4d3fc91). The previous version of this comment warned that
+# rebase-and-merge rewrites SHAs and the rev might not survive — it did not.
+#
+# CORRECTION to a false rationale that shipped here and in commit ad72d4a's
+# message: an early pin was justified as "the commit this GUI was vendored
+# from, so engine and calling code stay in step." That was vacuous — the
+# GUI tree is byte-identical at dcf79d6 and 50528e0, so "vendored from"
+# cannot select between revs. Protocol compatibility can, and does.
+#
+# When these are published to PyPI, delete this block — the dependencies
+# entries above are already in PyPI form and need no change.
+flowcoder-engine = { git = "https://github.com/Gaia-PBC/flowcoder-core.git", rev = "0897526659863b4b78c7524931d78e8f931dc219", subdirectory = "packages/flowcoder-engine" }
+flowcoder-flowchart = { git = "https://github.com/Gaia-PBC/flowcoder-core.git", rev = "0897526659863b4b78c7524931d78e8f931dc219", subdirectory = "packages/flowcoder-flowchart" }
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests that use real claude CLI (costs tokens, deselect with '-m \"not slow\"')",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E203"]

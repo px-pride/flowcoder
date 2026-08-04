@@ -1,0 +1,57 @@
+# Ignore everything by default
+*
+
+# Allow src/ directory and all its contents
+!src/
+!src/**
+
+# Allow specific images in images/
+!images/
+!images/flowchart-example.png
+
+# Allow root level files
+!pyproject.toml
+!README.md
+!uv.lock
+!LICENSE
+
+# Allow .gitignore itself
+!.gitignore
+
+# Allow .github directory
+!.github/
+!.github/**
+
+# Allow .python-version
+!.python-version
+
+# Allow package.json and package-lock.json for npm dependencies
+!package.json
+!package-lock.json
+
+# Allow tests/ directory
+!tests/
+!tests/**
+
+# Allow scripts/
+!scripts/
+!scripts/**
+
+# Allow design_docs/
+!design_docs/
+!design_docs/**
+
+# Allow progress-reports/
+!progress-reports/
+!progress-reports/**
+
+# --- Build artifacts. Keep this block LAST. ---
+# gitignore is order-dependent: the last matching rule wins. Every !dir/**
+# rule above re-includes everything beneath it, so these must come after
+# all of them or they get overridden (tests/__pycache__/ escaped exactly
+# that way when this block sat near the top of the file).
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
