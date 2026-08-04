@@ -8,13 +8,10 @@
 # But ignore __pycache__ everywhere
 __pycache__/
 
-# Allow specific files in commands/ (must un-ignore dir first, contents still ignored by *)
-!commands/
-!commands/ex0-design-doc.json
-!commands/ex1-do-until-done.json
-!commands/ex2-testing-loop.json
-!commands/ex3-improve-project.json
-!commands/all-examples.json
+# ...and build artifacts, which !src/** would otherwise un-ignore
+*.egg-info/
+build/
+dist/
 
 # Allow specific images in images/
 !images/
@@ -39,10 +36,6 @@ __pycache__/
 # Allow package.json and package-lock.json for npm dependencies
 !package.json
 !package-lock.json
-
-# Allow packages/ directory (vendored Pydantic packages)
-!packages/
-!packages/**
 
 # Allow tests/ directory
 !tests/
