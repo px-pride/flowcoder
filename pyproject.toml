@@ -18,13 +18,31 @@ dependencies = [
 [tool.uv.sources]
 # flowcoder-engine and flowcoder-flowchart are not published to PyPI; they
 # live in the engine repo under packages/. https + a pinned rev matches
-# leo-axi's pyproject.toml. dcf79d6 is the commit this GUI was vendored
-# from, so engine and calling code stay in step.
+# leo-axi's pyproject.toml.
+#
+# Pinned to 45c078e — head of px-pride/flowcoder PR #9
+# (feature/repo-separation-restacked), top of the four-PR stack
+# #4 -> #6 -> #8 -> #9. The pin criterion is PROTOCOL COMPATIBILITY: from
+# engine commit 0eb5807 onward, walker.py passes session_id= to
+# emit_block_complete and calls emit_block_timeout, both of which the
+# bridge in src/adapters/protocol_bridge.py now handles.
+#
+# CORRECTION to a false rationale that shipped here and in commit ad72d4a's
+# message: the old pin was justified as "the commit this GUI was vendored
+# from, so engine and calling code stay in step." That was vacuous — the
+# GUI tree is byte-identical at dcf79d6 and 50528e0, so "vendored from"
+# cannot select between revs. Protocol compatibility can, and does.
+#
+# PR #9 changes nothing under packages/ relative to PR #8 (verified: empty
+# diff over both package dirs), so this rev carries the same engine code as
+# the stack's third PR. Re-pin to the post-merge master commit once the
+# stack lands; GitHub's rebase-and-merge rewrites SHAs, so this rev may not
+# survive as a master ancestor unless the stack merges via merge commits.
 #
 # When these are published to PyPI, delete this block — the dependencies
 # entries above are already in PyPI form and need no change.
-flowcoder-engine = { git = "https://github.com/px-pride/flowcoder.git", rev = "dcf79d624824f102b0f8870e784dc9960aa90c2a", subdirectory = "packages/flowcoder-engine" }
-flowcoder-flowchart = { git = "https://github.com/px-pride/flowcoder.git", rev = "dcf79d624824f102b0f8870e784dc9960aa90c2a", subdirectory = "packages/flowcoder-flowchart" }
+flowcoder-engine = { git = "https://github.com/px-pride/flowcoder.git", rev = "45c078edd892f58aebe8b5eb314ab4cb45f19eaf", subdirectory = "packages/flowcoder-engine" }
+flowcoder-flowchart = { git = "https://github.com/px-pride/flowcoder.git", rev = "45c078edd892f58aebe8b5eb314ab4cb45f19eaf", subdirectory = "packages/flowcoder-flowchart" }
 
 [project.optional-dependencies]
 dev = [

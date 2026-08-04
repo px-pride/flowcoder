@@ -164,7 +164,7 @@ wheels = [
 [[package]]
 name = "flowcoder-engine"
 version = "0.1.0"
-source = { git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-engine&rev=dcf79d624824f102b0f8870e784dc9960aa90c2a#dcf79d624824f102b0f8870e784dc9960aa90c2a" }
+source = { git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-engine&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf#45c078edd892f58aebe8b5eb314ab4cb45f19eaf" }
 dependencies = [
     { name = "flowcoder-flowchart" },
     { name = "opentelemetry-api" },
@@ -173,7 +173,7 @@ dependencies = [
 [[package]]
 name = "flowcoder-flowchart"
 version = "0.1.0"
-source = { git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-flowchart&rev=dcf79d624824f102b0f8870e784dc9960aa90c2a#dcf79d624824f102b0f8870e784dc9960aa90c2a" }
+source = { git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-flowchart&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf#45c078edd892f58aebe8b5eb314ab4cb45f19eaf" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -205,8 +205,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asyncio-throttle", specifier = ">=1.0.0" },
-    { name = "flowcoder-engine", git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-engine&rev=dcf79d624824f102b0f8870e784dc9960aa90c2a" },
-    { name = "flowcoder-flowchart", git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-flowchart&rev=dcf79d624824f102b0f8870e784dc9960aa90c2a" },
+    { name = "flowcoder-engine", git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-engine&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf" },
+    { name = "flowcoder-flowchart", git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-flowchart&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf" },
     { name = "jsonpath-ng", specifier = ">=1.6.0" },
     { name = "jsonschema", specifier = ">=4.19.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
