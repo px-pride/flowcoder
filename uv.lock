@@ -164,7 +164,7 @@ wheels = [
 [[package]]
 name = "flowcoder-engine"
 version = "0.1.0"
-source = { git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-engine&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf#45c078edd892f58aebe8b5eb314ab4cb45f19eaf" }
+source = { git = "https://github.com/Gaia-PBC/flowcoder-core.git?subdirectory=packages%2Fflowcoder-engine&rev=0897526659863b4b78c7524931d78e8f931dc219#0897526659863b4b78c7524931d78e8f931dc219" }
 dependencies = [
     { name = "flowcoder-flowchart" },
     { name = "opentelemetry-api" },
@@ -173,7 +173,7 @@ dependencies = [
 [[package]]
 name = "flowcoder-flowchart"
 version = "0.1.0"
-source = { git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-flowchart&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf#45c078edd892f58aebe8b5eb314ab4cb45f19eaf" }
+source = { git = "https://github.com/Gaia-PBC/flowcoder-core.git?subdirectory=packages%2Fflowcoder-flowchart&rev=0897526659863b4b78c7524931d78e8f931dc219#0897526659863b4b78c7524931d78e8f931dc219" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -205,8 +205,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asyncio-throttle", specifier = ">=1.0.0" },
-    { name = "flowcoder-engine", git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-engine&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf" },
-    { name = "flowcoder-flowchart", git = "https://github.com/px-pride/flowcoder.git?subdirectory=packages%2Fflowcoder-flowchart&rev=45c078edd892f58aebe8b5eb314ab4cb45f19eaf" },
+    { name = "flowcoder-engine", git = "https://github.com/Gaia-PBC/flowcoder-core.git?subdirectory=packages%2Fflowcoder-engine&rev=0897526659863b4b78c7524931d78e8f931dc219" },
+    { name = "flowcoder-flowchart", git = "https://github.com/Gaia-PBC/flowcoder-core.git?subdirectory=packages%2Fflowcoder-flowchart&rev=0897526659863b4b78c7524931d78e8f931dc219" },
     { name = "jsonpath-ng", specifier = ">=1.6.0" },
     { name = "jsonschema", specifier = ">=4.19.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
