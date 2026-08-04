@@ -1,0 +1,44 @@
+[project]
+name = "flowcoder-tk-gui"
+version = "1.0.0"
+description = "Tkinter GUI for FlowCoder — visual flowchart builder for automated workflows"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flowcoder-engine>=0.1.0",
+    "flowcoder-flowchart>=0.1.0",
+    "pydantic>=2.0.0",
+    "pygame>=2.5.0",
+    "jsonschema>=4.19.0",
+    "jsonpath-ng>=1.6.0",
+    "asyncio-throttle>=1.0.0",
+    "tkfilebrowser>=2.3.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests that use real claude CLI (costs tokens, deselect with '-m \"not slow\"')",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E203"]
