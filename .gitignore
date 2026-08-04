@@ -5,14 +5,6 @@
 !src/
 !src/**
 
-# But ignore __pycache__ everywhere
-__pycache__/
-
-# ...and build artifacts, which !src/** would otherwise un-ignore
-*.egg-info/
-build/
-dist/
-
 # Allow specific images in images/
 !images/
 !images/flowchart-example.png
@@ -52,3 +44,14 @@ dist/
 # Allow progress-reports/
 !progress-reports/
 !progress-reports/**
+
+# --- Build artifacts. Keep this block LAST. ---
+# gitignore is order-dependent: the last matching rule wins. Every !dir/**
+# rule above re-includes everything beneath it, so these must come after
+# all of them or they get overridden (tests/__pycache__/ escaped exactly
+# that way when this block sat near the top of the file).
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
