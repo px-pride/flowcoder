@@ -15,6 +15,17 @@ dependencies = [
     "tkfilebrowser>=2.3.2",
 ]
 
+[tool.uv.sources]
+# flowcoder-engine and flowcoder-flowchart are not published to PyPI; they
+# live in the engine repo under packages/. https + a pinned rev matches
+# leo-axi's pyproject.toml. dcf79d6 is the commit this GUI was vendored
+# from, so engine and calling code stay in step.
+#
+# When these are published to PyPI, delete this block — the dependencies
+# entries above are already in PyPI form and need no change.
+flowcoder-engine = { git = "https://github.com/px-pride/flowcoder.git", rev = "dcf79d624824f102b0f8870e784dc9960aa90c2a", subdirectory = "packages/flowcoder-engine" }
+flowcoder-flowchart = { git = "https://github.com/px-pride/flowcoder.git", rev = "dcf79d624824f102b0f8870e784dc9960aa90c2a", subdirectory = "packages/flowcoder-flowchart" }
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
